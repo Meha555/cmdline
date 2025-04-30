@@ -36,8 +36,14 @@
 #include <typeinfo>
 #include <cstring>
 #include <algorithm>
+#if defined(__clang__) || defined(__GNUC__)
 #include <cxxabi.h>
+#endif
 #include <cstdlib>
+
+#ifdef max
+#undef max
+#endif
 
 namespace cmdline{
 
@@ -104,11 +110,17 @@ Target lexical_cast(const Source &arg)
 
 static inline std::string demangle(const std::string &name)
 {
+#ifdef _MSC_VER
+  return name;
+#elif defined (__clang__) || defined (__GNUC__)
   int status=0;
   char *p=abi::__cxa_demangle(name.c_str(), 0, 0, &status);
   std::string ret(p);
   free(p);
   return ret;
+#else
+#error unexpected c complier (msvc/gcc), Need to implement this method for demangle
+#endif
 }
 
 template <class T>
@@ -135,7 +147,7 @@ inline std::string readable_typename<std::string>()
 
 class cmdline_error : public std::exception {
 public:
-  cmdline_error(const std::string &msg): msg(msg){}
+  cmdline_error(const std::string &message): msg(message){}
   ~cmdline_error() throw() {}
   const char *what() const throw() { return msg.c_str(); }
 private:
@@ -151,7 +163,7 @@ struct default_reader{
 
 template <class T>
 struct range_reader{
-  range_reader(const T &low, const T &high): low(low), high(high) {}
+  range_reader(const T &low_bound, const T &upper_bound): low(low_bound), high(upper_bound) {}
   T operator()(const std::string &s) const {
     T ret=default_reader<T>()(s);
     if (!(ret>=low && ret<=high)) throw cmdline::cmdline_error("range_error");
@@ -162,9 +174,9 @@ private:
 };
 
 template <class T>
-range_reader<T> range(const T &low, const T &high)
+range_reader<T> range(const T &lower_bound, const T &upper_bound)
 {
-  return range_reader<T>(low, high);
+  return range_reader<T>(lower_bound, upper_bound);
 }
 
 template <class T>
@@ -180,130 +192,151 @@ private:
   std::vector<T> alt;
 };
 
-template <class T>
-oneof_reader<T> oneof(T a1)
+template <typename Reader, typename T>
+Reader oneof_impl(Reader& reader, T&& last)
 {
-  oneof_reader<T> ret;
-  ret.add(a1);
-  return ret;
+  reader.add(std::forward<T>(last));
+  return reader;
 }
 
-template <class T>
-oneof_reader<T> oneof(T a1, T a2)
+template <typename Reader, typename T, typename ...Rest>
+Reader oneof_impl(Reader& reader, T&& first, Rest&& ...rest)
 {
-  oneof_reader<T> ret;
-  ret.add(a1);
-  ret.add(a2);
-  return ret;
+  reader.add(std::forward<T>(first));
+  return oneof_impl(reader, std::forward<Rest>(rest)...);
 }
 
-template <class T>
-oneof_reader<T> oneof(T a1, T a2, T a3)
+template <typename T, typename ...Rest>
+oneof_reader<T> oneof(Rest&& ...rest)
 {
-  oneof_reader<T> ret;
-  ret.add(a1);
-  ret.add(a2);
-  ret.add(a3);
-  return ret;
+  oneof_reader<T> reader;
+  return oneof_impl(reader, std::forward<Rest>(rest)...);
 }
 
-template <class T>
-oneof_reader<T> oneof(T a1, T a2, T a3, T a4)
-{
-  oneof_reader<T> ret;
-  ret.add(a1);
-  ret.add(a2);
-  ret.add(a3);
-  ret.add(a4);
-  return ret;
-}
+// template <class T>
+// oneof_reader<T> oneof(T a1)
+// {
+//   oneof_reader<T> ret;
+//   ret.add(a1);
+//   return ret;
+// }
 
-template <class T>
-oneof_reader<T> oneof(T a1, T a2, T a3, T a4, T a5)
-{
-  oneof_reader<T> ret;
-  ret.add(a1);
-  ret.add(a2);
-  ret.add(a3);
-  ret.add(a4);
-  ret.add(a5);
-  return ret;
-}
+// template <class T>
+// oneof_reader<T> oneof(T a1, T a2)
+// {
+//   oneof_reader<T> ret;
+//   ret.add(a1);
+//   ret.add(a2);
+//   return ret;
+// }
 
-template <class T>
-oneof_reader<T> oneof(T a1, T a2, T a3, T a4, T a5, T a6)
-{
-  oneof_reader<T> ret;
-  ret.add(a1);
-  ret.add(a2);
-  ret.add(a3);
-  ret.add(a4);
-  ret.add(a5);
-  ret.add(a6);
-  return ret;
-}
+// template <class T>
+// oneof_reader<T> oneof(T a1, T a2, T a3)
+// {
+//   oneof_reader<T> ret;
+//   ret.add(a1);
+//   ret.add(a2);
+//   ret.add(a3);
+//   return ret;
+// }
 
-template <class T>
-oneof_reader<T> oneof(T a1, T a2, T a3, T a4, T a5, T a6, T a7)
-{
-  oneof_reader<T> ret;
-  ret.add(a1);
-  ret.add(a2);
-  ret.add(a3);
-  ret.add(a4);
-  ret.add(a5);
-  ret.add(a6);
-  ret.add(a7);
-  return ret;
-}
+// template <class T>
+// oneof_reader<T> oneof(T a1, T a2, T a3, T a4)
+// {
+//   oneof_reader<T> ret;
+//   ret.add(a1);
+//   ret.add(a2);
+//   ret.add(a3);
+//   ret.add(a4);
+//   return ret;
+// }
 
-template <class T>
-oneof_reader<T> oneof(T a1, T a2, T a3, T a4, T a5, T a6, T a7, T a8)
-{
-  oneof_reader<T> ret;
-  ret.add(a1);
-  ret.add(a2);
-  ret.add(a3);
-  ret.add(a4);
-  ret.add(a5);
-  ret.add(a6);
-  ret.add(a7);
-  ret.add(a8);
-  return ret;
-}
+// template <class T>
+// oneof_reader<T> oneof(T a1, T a2, T a3, T a4, T a5)
+// {
+//   oneof_reader<T> ret;
+//   ret.add(a1);
+//   ret.add(a2);
+//   ret.add(a3);
+//   ret.add(a4);
+//   ret.add(a5);
+//   return ret;
+// }
 
-template <class T>
-oneof_reader<T> oneof(T a1, T a2, T a3, T a4, T a5, T a6, T a7, T a8, T a9)
-{
-  oneof_reader<T> ret;
-  ret.add(a1);
-  ret.add(a2);
-  ret.add(a3);
-  ret.add(a4);
-  ret.add(a5);
-  ret.add(a6);
-  ret.add(a7);
-  ret.add(a8);
-  ret.add(a9);
-  return ret;
-}
+// template <class T>
+// oneof_reader<T> oneof(T a1, T a2, T a3, T a4, T a5, T a6)
+// {
+//   oneof_reader<T> ret;
+//   ret.add(a1);
+//   ret.add(a2);
+//   ret.add(a3);
+//   ret.add(a4);
+//   ret.add(a5);
+//   ret.add(a6);
+//   return ret;
+// }
 
-template <class T>
-oneof_reader<T> oneof(T a1, T a2, T a3, T a4, T a5, T a6, T a7, T a8, T a9, T a10)
-{
-  oneof_reader<T> ret;
-  ret.add(a1);
-  ret.add(a2);
-  ret.add(a3);
-  ret.add(a4);
-  ret.add(a5);
-  ret.add(a6);
-  ret.add(a7);
-  ret.add(a8);
-  ret.add(a9);
-  ret.add(a10);
-  return ret;
-}
+// template <class T>
+// oneof_reader<T> oneof(T a1, T a2, T a3, T a4, T a5, T a6, T a7)
+// {
+//   oneof_reader<T> ret;
+//   ret.add(a1);
+//   ret.add(a2);
+//   ret.add(a3);
+//   ret.add(a4);
+//   ret.add(a5);
+//   ret.add(a6);
+//   ret.add(a7);
+//   return ret;
+// }
+
+// template <class T>
+// oneof_reader<T> oneof(T a1, T a2, T a3, T a4, T a5, T a6, T a7, T a8)
+// {
+//   oneof_reader<T> ret;
+//   ret.add(a1);
+//   ret.add(a2);
+//   ret.add(a3);
+//   ret.add(a4);
+//   ret.add(a5);
+//   ret.add(a6);
+//   ret.add(a7);
+//   ret.add(a8);
+//   return ret;
+// }
+
+// template <class T>
+// oneof_reader<T> oneof(T a1, T a2, T a3, T a4, T a5, T a6, T a7, T a8, T a9)
+// {
+//   oneof_reader<T> ret;
+//   ret.add(a1);
+//   ret.add(a2);
+//   ret.add(a3);
+//   ret.add(a4);
+//   ret.add(a5);
+//   ret.add(a6);
+//   ret.add(a7);
+//   ret.add(a8);
+//   ret.add(a9);
+//   return ret;
+// }
+
+// template <class T>
+// oneof_reader<T> oneof(T a1, T a2, T a3, T a4, T a5, T a6, T a7, T a8, T a9, T a10)
+// {
+//   oneof_reader<T> ret;
+//   ret.add(a1);
+//   ret.add(a2);
+//   ret.add(a3);
+//   ret.add(a4);
+//   ret.add(a5);
+//   ret.add(a6);
+//   ret.add(a7);
+//   ret.add(a8);
+//   ret.add(a9);
+//   ret.add(a10);
+//   return ret;
+// }
 
 //-----
 
@@ -317,33 +350,33 @@ public:
       delete p->second;
   }
 
-  void add(const std::string &name,
+  void add(const std::string &full_name,
            char short_name=0,
-           const std::string &desc=""){
-    if (options.count(name)) throw cmdline_error("multiple definition: "+name);
-    options[name]=new option_without_value(name, short_name, desc);
-    ordered.push_back(options[name]);
+           const std::string &description=""){
+    if (options.count(full_name)) throw cmdline_error("multiple definition: "+full_name);
+    options[full_name]=new option_without_value(full_name, short_name, description);
+    ordered.push_back(options[full_name]);
   }
 
   template <class T>
-  void add(const std::string &name,
+  void add(const std::string &full_name,
            char short_name=0,
-           const std::string &desc="",
-           bool need=true,
-           const T def=T()){
-    add(name, short_name, desc, need, def, default_reader<T>());
+           const std::string &description="",
+           bool is_needed=true,
+           const T definition=T()){
+    add(full_name, short_name, description, is_needed, definition, default_reader<T>());
   }
 
   template <class T, class F>
-  void add(const std::string &name,
+  void add(const std::string &full_name,
            char short_name=0,
-           const std::string &desc="",
-           bool need=true,
-           const T def=T(),
-           F reader=F()){
-    if (options.count(name)) throw cmdline_error("multiple definition: "+name);
-    options[name]=new option_with_value_with_reader<T, F>(name, short_name, need, def, desc, reader);
-    ordered.push_back(options[name]);
+           const std::string &description="",
+           bool is_needed=true,
+           const T definition=T(),
+           F value_reader=F()){
+    if (options.count(full_name)) throw cmdline_error("multiple definition: "+full_name);
+    options[full_name]=new option_with_value_with_reader<T, F>(full_name, short_name, is_needed, definition, description, value_reader);
+    ordered.push_back(options[full_name]);
   }
 
   void footer(const std::string &f){
@@ -533,7 +566,7 @@ public:
   void parse_check(const std::vector<std::string> &args){
     if (!options.count("help"))
       add("help", '?', "print this message");
-    check(args.size(), parse(args));
+    check(static_cast<int>(args.size()), parse(args));
   }
 
   void parse_check(int argc, char *argv[]){
@@ -639,10 +672,10 @@ private:
 
   class option_without_value : public option_base {
   public:
-    option_without_value(const std::string &name,
+    option_without_value(const std::string &full_name,
                          char short_name,
-                         const std::string &desc)
-      :nam(name), snam(short_name), desc(desc), has(false){
+                         const std::string &description)
+      :nam(full_name), snam(short_name), desc(description), has(false){
     }
     ~option_without_value(){}
 
@@ -695,14 +728,14 @@ private:
   template <class T>
   class option_with_value : public option_base {
   public:
-    option_with_value(const std::string &name,
+    option_with_value(const std::string &full_name,
                       char short_name,
-                      bool need,
-                      const T &def,
-                      const std::string &desc)
-      : nam(name), snam(short_name), need(need), has(false)
-      , def(def), actual(def) {
-      this->desc=full_description(desc);
+                      bool is_needed,
+                      const T &definition,
+                      const std::string &description)
+      : nam(full_name), snam(short_name), need(is_needed), has(false)
+      , def(definition), actual(definition) {
+      this->desc=full_description(description);
     }
     ~option_with_value(){}
 
@@ -721,7 +754,7 @@ private:
         actual=read(value);
         has=true;
       }
-      catch(const std::exception &e){
+      catch(const std::exception &){
         return false;
       }
       return true;
@@ -757,9 +790,9 @@ private:
     }
 
   protected:
-    std::string full_description(const std::string &desc){
+    std::string full_description(const std::string &description){
       return
-        desc+" ("+detail::readable_typename<T>()+
+        description+" ("+detail::readable_typename<T>()+
         (need?"":" [="+detail::default_value<T>(def)+"]")
         +")";
     }
@@ -779,13 +812,13 @@ private:
   template <class T, class F>
   class option_with_value_with_reader : public option_with_value<T> {
   public:
-    option_with_value_with_reader(const std::string &name,
+    option_with_value_with_reader(const std::string &full_name,
                                   char short_name,
-                                  bool need,
-                                  const T def,
-                                  const std::string &desc,
-                                  F reader)
-      : option_with_value<T>(name, short_name, need, def, desc), reader(reader){
+                                  bool is_needed,
+                                  const T definition,
+                                  const std::string &description,
+                                  F value_reader)
+      : option_with_value<T>(full_name, short_name, is_needed, definition, description), reader(value_reader){
     }
 
   private:
