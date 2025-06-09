@@ -350,25 +350,26 @@ public:
       delete p->second;
   }
 
-  void add(const std::string &full_name,
+  parser &add(const std::string &full_name,
            char short_name=0,
            const std::string &description=""){
     if (options.count(full_name)) throw cmdline_error("multiple definition: "+full_name);
     options[full_name]=new option_without_value(full_name, short_name, description);
     ordered.push_back(options[full_name]);
+    return *this;
   }
 
   template <class T>
-  void add(const std::string &full_name,
+  parser &add(const std::string &full_name,
            char short_name=0,
            const std::string &description="",
            bool is_needed=true,
            const T definition=T()){
-    add(full_name, short_name, description, is_needed, definition, default_reader<T>());
+    return add(full_name, short_name, description, is_needed, definition, default_reader<T>());
   }
 
   template <class T, class F>
-  void add(const std::string &full_name,
+  parser &add(const std::string &full_name,
            char short_name=0,
            const std::string &description="",
            bool is_needed=true,
@@ -377,14 +378,17 @@ public:
     if (options.count(full_name)) throw cmdline_error("multiple definition: "+full_name);
     options[full_name]=new option_with_value_with_reader<T, F>(full_name, short_name, is_needed, definition, description, value_reader);
     ordered.push_back(options[full_name]);
+    return *this;
   }
 
-  void footer(const std::string &f){
+  parser &footer(const std::string &f){
     ftr=f;
+    return *this;
   }
 
-  void set_program_name(const std::string &name){
+  parser &set_program_name(const std::string &name){
     prog_name=name;
+    return *this;
   }
 
   bool exist(const std::string &name) const {
