@@ -27,15 +27,15 @@
 
 #pragma once
 
-#include <iostream>
-#include <sstream>
-#include <vector>
-#include <map>
-#include <string>
-#include <stdexcept>
-#include <typeinfo>
-#include <cstring>
 #include <algorithm>
+#include <cstring>
+#include <iostream>
+#include <map>
+#include <sstream>
+#include <string>
+#include <typeinfo>
+#include <vector>
+
 #if !defined(_MSC_VER) && (defined(__clang__) || defined(__GNUC__))
 #include <cxxabi.h>
 #endif
@@ -45,171 +45,205 @@
 #undef max
 #endif
 
-namespace cmdline{
+namespace cmdline
+{
 
-namespace detail{
+namespace detail
+{
 
-template <typename Target, typename Source, bool Same>
-class lexical_cast_t{
+template<typename Target, typename Source, bool Same>
+class lexical_cast_t
+{
 public:
-  static Target cast(const Source &arg){
-    Target ret;
-    std::stringstream ss;
-    if (!(ss<<arg && ss>>ret && ss.eof()))
-      throw std::bad_cast();
-    return ret;
-  }
+    static Target cast(const Source &arg)
+    {
+        Target ret;
+        std::stringstream ss;
+        if (!(ss << arg && ss >> ret && ss.eof()))
+            throw std::bad_cast();
+        return ret;
+    }
 };
 
-template <typename Target, typename Source>
-class lexical_cast_t<Target, Source, true>{
+template<typename Target, typename Source>
+class lexical_cast_t<Target, Source, true>
+{
 public:
-  static Target cast(const Source &arg){
-    return arg;
-  }
+    static Target cast(const Source &arg)
+    {
+        return arg;
+    }
 };
 
-template <typename Source>
-class lexical_cast_t<std::string, Source, false>{
+template<typename Source>
+class lexical_cast_t<std::string, Source, false>
+{
 public:
-  static std::string cast(const Source &arg){
-    std::ostringstream ss;
-    ss<<arg;
-    return ss.str();
-  }
+    static std::string cast(const Source &arg)
+    {
+        std::ostringstream ss;
+        ss << arg;
+        return ss.str();
+    }
 };
 
-template <typename Target>
-class lexical_cast_t<Target, std::string, false>{
+template<typename Target>
+class lexical_cast_t<Target, std::string, false>
+{
 public:
-  static Target cast(const std::string &arg){
-    Target ret;
-    std::istringstream ss(arg);
-    if (!(ss>>ret && ss.eof()))
-      throw std::bad_cast();
-    return ret;
-  }
+    static Target cast(const std::string &arg)
+    {
+        Target ret;
+        std::istringstream ss(arg);
+        if (!(ss >> ret && ss.eof()))
+            throw std::bad_cast();
+        return ret;
+    }
 };
 
-template <typename T1, typename T2>
-struct is_same {
-  static const bool value = false;
+template<typename T1, typename T2>
+struct is_same
+{
+    static const bool value = false;
 };
 
-template <typename T>
-struct is_same<T, T>{
-  static const bool value = true;
+template<typename T>
+struct is_same<T, T>
+{
+    static const bool value = true;
 };
 
 template<typename Target, typename Source>
 Target lexical_cast(const Source &arg)
 {
-  return lexical_cast_t<Target, Source, detail::is_same<Target, Source>::value>::cast(arg);
+    return lexical_cast_t<Target, Source, detail::is_same<Target, Source>::value>::cast(arg);
 }
 
 static inline std::string demangle(const std::string &name)
 {
 #ifdef _MSC_VER
-  return name;
-#elif defined (__clang__) || defined (__GNUC__)
-  int status=0;
-  char *p=abi::__cxa_demangle(name.c_str(), 0, 0, &status);
-  std::string ret(p);
-  free(p);
-  return ret;
+    return name;
+#elif defined(__clang__) || defined(__GNUC__)
+    int status = 0;
+    char *p = abi::__cxa_demangle(name.c_str(), 0, 0, &status);
+    std::string ret(p);
+    free(p);
+    return ret;
 #else
 #error unexpected c complier (msvc/gnu/llvm), Need to implement this method for demangle
 #endif
 }
 
-template <class T>
+template<class T>
 std::string readable_typename()
 {
-  return demangle(typeid(T).name());
+    return demangle(typeid(T).name());
 }
 
-template <class T>
+template<class T>
 std::string default_value(T def)
 {
-  return detail::lexical_cast<std::string>(def);
+    return detail::lexical_cast<std::string>(def);
 }
 
-template <>
+template<>
 inline std::string readable_typename<std::string>()
 {
-  return "string";
+    return "string";
 }
 
-} // detail
+} // namespace detail
 
-//-----
-
-class cmdline_error : public std::exception {
+class cmdline_error : public std::exception
+{
 public:
-  cmdline_error(const std::string &message): msg(message){}
-  ~cmdline_error() throw() {}
-  const char *what() const throw() { return msg.c_str(); }
+    cmdline_error(const std::string &message)
+        : msg_(message)
+    {
+    }
+    ~cmdline_error() = default;
+    const char *what() const
+    {
+        return msg_.c_str();
+    }
+
 private:
-  std::string msg;
+    std::string msg_;
 };
 
-template <class T>
-struct default_reader{
-  T operator()(const std::string &str){
-    return detail::lexical_cast<T>(str);
-  }
+template<class T>
+struct default_reader
+{
+    T operator()(const std::string &str)
+    {
+        return detail::lexical_cast<T>(str);
+    }
 };
 
-template <class T>
-struct range_reader{
-  range_reader(const T &low_bound, const T &upper_bound): low(low_bound), high(upper_bound) {}
-  T operator()(const std::string &s) const {
-    T ret=default_reader<T>()(s);
-    if (!(ret>=low && ret<=high)) throw cmdline::cmdline_error("range_error");
-    return ret;
-  }
+template<class T>
+struct range_reader
+{
+    range_reader(const T &low_bound, const T &upper_bound)
+        : low_(low_bound)
+        , high_(upper_bound)
+    {
+    }
+    T operator()(const std::string &s) const
+    {
+        T ret = default_reader<T>()(s);
+        if (!(ret >= low_ && ret <= high_))
+            throw cmdline::cmdline_error("range_error");
+        return ret;
+    }
+
 private:
-  T low, high;
+    T low_, high_;
 };
 
-template <class T>
+template<class T>
 range_reader<T> range(const T &lower_bound, const T &upper_bound)
 {
-  return range_reader<T>(lower_bound, upper_bound);
+    return range_reader<T>(lower_bound, upper_bound);
 }
 
-template <class T>
-struct oneof_reader{
-  T operator()(const std::string &s){
-    T ret=default_reader<T>()(s);
-    if (std::find(alt.begin(), alt.end(), ret)==alt.end())
-      throw cmdline_error("");
-    return ret;
-  }
-  void add(const T &v){ alt.push_back(v); }
+template<class T>
+struct oneof_reader
+{
+    T operator()(const std::string &s)
+    {
+        T ret = default_reader<T>()(s);
+        if (std::find(alt_.begin(), alt_.end(), ret) == alt_.end())
+            throw cmdline_error("");
+        return ret;
+    }
+    void add(const T &v)
+    {
+        alt_.push_back(v);
+    }
+
 private:
-  std::vector<T> alt;
+    std::vector<T> alt_;
 };
 
-template <typename Reader, typename T>
-Reader oneof_impl(Reader& reader, T&& last)
+template<typename Reader, typename T>
+Reader oneof_impl(Reader &reader, T &&last)
 {
-  reader.add(std::forward<T>(last));
-  return reader;
+    reader.add(std::forward<T>(last));
+    return reader;
 }
 
-template <typename Reader, typename T, typename ...Rest>
-Reader oneof_impl(Reader& reader, T&& first, Rest&& ...rest)
+template<typename Reader, typename T, typename... Rest>
+Reader oneof_impl(Reader &reader, T &&first, Rest &&...rest)
 {
-  reader.add(std::forward<T>(first));
-  return oneof_impl(reader, std::forward<Rest>(rest)...);
+    reader.add(std::forward<T>(first));
+    return oneof_impl(reader, std::forward<Rest>(rest)...);
 }
 
-template <typename T, typename ...Rest>
-oneof_reader<T> oneof(Rest&& ...rest)
+template<typename T, typename... Rest>
+oneof_reader<T> oneof(Rest &&...rest)
 {
-  oneof_reader<T> reader;
-  return oneof_impl(reader, std::forward<Rest>(rest)...);
+    oneof_reader<T> reader;
+    return oneof_impl(reader, std::forward<Rest>(rest)...);
 }
 
 // template <class T>
@@ -337,509 +371,568 @@ oneof_reader<T> oneof(Rest&& ...rest)
 //   return ret;
 // }
 
-//-----
-
-class parser{
+class parser
+{
 public:
-  parser(){
-  }
-  ~parser(){
-    for (std::map<std::string, option_base*>::iterator p=options.begin();
-         p!=options.end(); p++)
-      delete p->second;
-  }
-
-  parser &add(const std::string &full_name,
-           char short_name=0,
-           const std::string &description=""){
-    if (options.count(full_name)) throw cmdline_error("multiple definition: "+full_name);
-    options[full_name]=new option_without_value(full_name, short_name, description);
-    ordered.push_back(options[full_name]);
-    return *this;
-  }
-
-  template <class T>
-  parser &add(const std::string &full_name,
-           char short_name=0,
-           const std::string &description="",
-           bool is_needed=true,
-           const T definition=T()){
-    return add(full_name, short_name, description, is_needed, definition, default_reader<T>());
-  }
-
-  template <class T, class F>
-  parser &add(const std::string &full_name,
-           char short_name=0,
-           const std::string &description="",
-           bool is_needed=true,
-           const T definition=T(),
-           F value_reader=F()){
-    if (options.count(full_name)) throw cmdline_error("multiple definition: "+full_name);
-    options[full_name]=new option_with_value_with_reader<T, F>(full_name, short_name, is_needed, definition, description, value_reader);
-    ordered.push_back(options[full_name]);
-    return *this;
-  }
-
-  parser &footer(const std::string &f){
-    ftr=f;
-    return *this;
-  }
-
-  parser &set_program_name(const std::string &name){
-    prog_name=name;
-    return *this;
-  }
-
-  bool exist(const std::string &name) const {
-    if (options.count(name)==0) throw cmdline_error("there is no flag: --"+name);
-    return options.find(name)->second->has_set();
-  }
-
-  template <class T>
-  const T &get(const std::string &name) const {
-    if (options.count(name)==0) throw cmdline_error("there is no flag: --"+name);
-    const option_with_value<T> *p=dynamic_cast<const option_with_value<T>*>(options.find(name)->second);
-    if (p==NULL) throw cmdline_error("type mismatch flag '"+name+"'");
-    return p->get();
-  }
-
-  const std::vector<std::string> &rest() const {
-    return others;
-  }
-
-  bool parse(const std::string &arg){
-    std::vector<std::string> args;
-
-    std::string buf;
-    bool in_quote=false;
-    for (std::string::size_type i=0; i<arg.length(); i++){
-      if (arg[i]=='\"'){
-        in_quote=!in_quote;
-        continue;
-      }
-
-      if (arg[i]==' ' && !in_quote){
-        args.push_back(buf);
-        buf="";
-        continue;
-      }
-
-      if (arg[i]=='\\'){
-        i++;
-        if (i>=arg.length()){
-          errors.push_back("unexpected occurrence of '\\' at end of string");
-          return false;
-        }
-      }
-
-      buf+=arg[i];
+    parser() = default;
+    ~parser()
+    {
+        for (std::map<std::string, option_base *>::iterator p = options_.begin();
+             p != options_.end(); p++)
+            delete p->second;
     }
 
-    if (in_quote){
-      errors.push_back("quote is not closed");
-      return false;
+    parser &add(const std::string &full_name,
+                char short_name = 0,
+                const std::string &description = "")
+    {
+        if (options_.count(full_name))
+            throw cmdline_error("multiple definition: " + full_name);
+        options_[full_name] = new option_without_value(full_name, short_name, description);
+        ordered_.push_back(options_[full_name]);
+        return *this;
     }
 
-    if (buf.length()>0)
-      args.push_back(buf);
-
-    for (size_t i=0; i<args.size(); i++)
-      std::cout<<"\""<<args[i]<<"\""<<std::endl;
-
-    return parse(args);
-  }
-
-  bool parse(const std::vector<std::string> &args){
-    int argc=static_cast<int>(args.size());
-    std::vector<const char*> argv(argc);
-
-    for (int i=0; i<argc; i++)
-      argv[i]=args[i].c_str();
-
-    return parse(argc, &argv[0]);
-  }
-
-  bool parse(int argc, const char * const argv[]){
-    errors.clear();
-    others.clear();
-
-    if (argc<1){
-      errors.push_back("argument number must be longer than 0");
-      return false;
-    }
-    if (prog_name=="")
-      prog_name=argv[0];
-
-    std::map<char, std::string> lookup;
-    for (std::map<std::string, option_base*>::iterator p=options.begin();
-         p!=options.end(); p++){
-      if (p->first.length()==0) continue;
-      char initial=p->second->short_name();
-      if (initial){
-        if (lookup.count(initial)>0){
-          lookup[initial]="";
-          errors.push_back(std::string("short option '")+initial+"' is ambiguous");
-          return false;
-        }
-        else lookup[initial]=p->first;
-      }
+    template<class T>
+    parser &add(const std::string &full_name,
+                char short_name = 0,
+                const std::string &description = "",
+                bool is_needed = true,
+                const T definition = T())
+    {
+        return add(full_name, short_name, description, is_needed, definition, default_reader<T>());
     }
 
-    for (int i=1; i<argc; i++){
-      if (strncmp(argv[i], "--", 2)==0){
-        const char *p=strchr(argv[i]+2, '=');
-        if (p){
-          std::string name(argv[i]+2, p);
-          std::string val(p+1);
-          set_option(name, val);
-        }
-        else{
-          std::string name(argv[i]+2);
-          if (options.count(name)==0){
-            errors.push_back("undefined option: --"+name);
-            continue;
-          }
-          if (options[name]->has_value()){
-            if (i+1>=argc){
-              errors.push_back("option needs value: --"+name);
-              continue;
+    template<class T, class F>
+    parser &add(const std::string &full_name,
+                char short_name = 0,
+                const std::string &description = "",
+                bool is_needed = true,
+                const T definition = T(),
+                F value_reader = F())
+    {
+        if (options_.count(full_name))
+            throw cmdline_error("multiple definition: " + full_name);
+        options_[full_name] = new option_with_value_with_reader<T, F>(full_name, short_name, is_needed, definition, description, value_reader);
+        ordered_.push_back(options_[full_name]);
+        return *this;
+    }
+
+    parser &footer(const std::string &f)
+    {
+        ftr_ = f;
+        return *this;
+    }
+
+    parser &set_program_name(const std::string &name)
+    {
+        prog_name_ = name;
+        return *this;
+    }
+
+    bool exist(const std::string &name) const
+    {
+        if (options_.count(name) == 0)
+            throw cmdline_error("there is no flag: --" + name);
+        return options_.find(name)->second->has_set();
+    }
+
+    template<class T>
+    const T &get(const std::string &name) const
+    {
+        if (options_.count(name) == 0)
+            throw cmdline_error("there is no flag: --" + name);
+        const option_with_value<T> *p = dynamic_cast<const option_with_value<T> *>(options_.find(name)->second);
+        if (p == NULL)
+            throw cmdline_error("type mismatch flag '" + name + "'");
+        return p->get();
+    }
+
+    const std::vector<std::string> &rest() const
+    {
+        return others_;
+    }
+
+    bool parse(const std::string &arg)
+    {
+        std::vector<std::string> args;
+
+        std::string buf;
+        bool in_quote = false;
+        for (std::string::size_type i = 0; i < arg.length(); i++) {
+            if (arg[i] == '\"') {
+                in_quote = !in_quote;
+                continue;
             }
-            else{
-              i++;
-              set_option(name, argv[i]);
+
+            if (arg[i] == ' ' && !in_quote) {
+                args.push_back(buf);
+                buf = "";
+                continue;
             }
-          }
-          else{
-            set_option(name);
-          }
-        }
-      }
-      else if (strncmp(argv[i], "-", 1)==0){
-        if (!argv[i][1]) continue;
-        char last=argv[i][1];
-        for (int j=2; argv[i][j]; j++){
-          last=argv[i][j];
-          if (lookup.count(argv[i][j-1])==0){
-            errors.push_back(std::string("undefined short option: -")+argv[i][j-1]);
-            continue;
-          }
-          if (lookup[argv[i][j-1]]==""){
-            errors.push_back(std::string("ambiguous short option: -")+argv[i][j-1]);
-            continue;
-          }
-          set_option(lookup[argv[i][j-1]]);
+
+            if (arg[i] == '\\') {
+                i++;
+                if (i >= arg.length()) {
+                    errors_.push_back("unexpected occurrence of '\\' at end of string");
+                    return false;
+                }
+            }
+
+            buf += arg[i];
         }
 
-        if (lookup.count(last)==0){
-          errors.push_back(std::string("undefined short option: -")+last);
-          continue;
-        }
-        if (lookup[last]==""){
-          errors.push_back(std::string("ambiguous short option: -")+last);
-          continue;
+        if (in_quote) {
+            errors_.push_back("quote is not closed");
+            return false;
         }
 
-        if (i+1<argc && options[lookup[last]]->has_value()){
-          set_option(lookup[last], argv[i+1]);
-          i++;
-        }
-        else{
-          set_option(lookup[last]);
-        }
-      }
-      else{
-        others.push_back(argv[i]);
-      }
+        if (buf.length() > 0)
+            args.push_back(buf);
+
+        for (size_t i = 0; i < args.size(); i++)
+            std::cout << "\"" << args[i] << "\"" << std::endl;
+
+        return parse(args);
     }
 
-    for (std::map<std::string, option_base*>::iterator p=options.begin();
-         p!=options.end(); p++)
-      if (!p->second->valid())
-        errors.push_back("need option: --"+std::string(p->first));
+    bool parse(const std::vector<std::string> &args)
+    {
+        int argc = static_cast<int>(args.size());
+        std::vector<const char *> argv(argc);
 
-    return errors.size()==0;
-  }
+        for (int i = 0; i < argc; i++)
+            argv[i] = args[i].c_str();
 
-  void parse_check(const std::string &arg){
-    if (!options.count("help"))
-      add("help", '?', "print this message");
-    check(0, parse(arg));
-  }
-
-  void parse_check(const std::vector<std::string> &args){
-    if (!options.count("help"))
-      add("help", '?', "print this message");
-    check(static_cast<int>(args.size()), parse(args));
-  }
-
-  void parse_check(int argc, char *argv[]){
-    if (!options.count("help"))
-      add("help", '?', "print this message");
-    check(argc, parse(argc, argv));
-  }
-
-  std::string error() const{
-    return errors.size()>0?errors[0]:"";
-  }
-
-  std::string error_full() const{
-    std::ostringstream oss;
-    for (size_t i=0; i<errors.size(); i++)
-      oss<<errors[i]<<std::endl;
-    return oss.str();
-  }
-
-  std::string usage() const {
-    std::ostringstream oss;
-    oss<<"usage: "<<prog_name<<" ";
-    for (size_t i=0; i<ordered.size(); i++){
-      if (ordered[i]->must())
-        oss<<ordered[i]->short_description()<<" ";
+        return parse(argc, &argv[0]);
     }
-    
-    oss<<"[options] ... "<<ftr<<std::endl;
-    oss<<"options:"<<std::endl;
 
-    size_t max_width=0;
-    for (size_t i=0; i<ordered.size(); i++){
-      max_width=std::max(max_width, ordered[i]->name().length());
-    }
-    for (size_t i=0; i<ordered.size(); i++){
-      if (ordered[i]->short_name()){
-        oss<<"  -"<<ordered[i]->short_name()<<", ";
-      }
-      else{
-        oss<<"      ";
-      }
+    bool parse(int argc, const char *const argv[])
+    {
+        errors_.clear();
+        others_.clear();
 
-      oss<<"--"<<ordered[i]->name();
-      for (size_t j=ordered[i]->name().length(); j<max_width+4; j++)
-        oss<<' ';
-      oss<<ordered[i]->description()<<std::endl;
+        if (argc < 1) {
+            errors_.push_back("argument number must be longer than 0");
+            return false;
+        }
+        if (prog_name_ == "")
+            prog_name_ = argv[0];
+
+        std::map<char, std::string> lookup;
+        for (std::map<std::string, option_base *>::iterator p = options_.begin();
+             p != options_.end(); p++) {
+            if (p->first.length() == 0)
+                continue;
+            char initial = p->second->short_name();
+            if (initial) {
+                if (lookup.count(initial) > 0) {
+                    lookup[initial] = "";
+                    errors_.push_back(std::string("short option '") + initial + "' is ambiguous");
+                    return false;
+                } else
+                    lookup[initial] = p->first;
+            }
+        }
+
+        for (int i = 1; i < argc; i++) {
+            if (strncmp(argv[i], "--", 2) == 0) {
+                const char *p = strchr(argv[i] + 2, '=');
+                if (p) {
+                    std::string name(argv[i] + 2, p);
+                    std::string val(p + 1);
+                    set_option(name, val);
+                } else {
+                    std::string name(argv[i] + 2);
+                    if (options_.count(name) == 0) {
+                        errors_.push_back("undefined option: --" + name);
+                        continue;
+                    }
+                    if (options_[name]->has_value()) {
+                        if (i + 1 >= argc) {
+                            errors_.push_back("option needs value: --" + name);
+                            continue;
+                        } else {
+                            i++;
+                            set_option(name, argv[i]);
+                        }
+                    } else {
+                        set_option(name);
+                    }
+                }
+            } else if (strncmp(argv[i], "-", 1) == 0) {
+                if (!argv[i][1])
+                    continue;
+                char last = argv[i][1];
+                for (int j = 2; argv[i][j]; j++) {
+                    last = argv[i][j];
+                    if (lookup.count(argv[i][j - 1]) == 0) {
+                        errors_.push_back(std::string("undefined short option: -") + argv[i][j - 1]);
+                        continue;
+                    }
+                    if (lookup[argv[i][j - 1]] == "") {
+                        errors_.push_back(std::string("ambiguous short option: -") + argv[i][j - 1]);
+                        continue;
+                    }
+                    set_option(lookup[argv[i][j - 1]]);
+                }
+
+                if (lookup.count(last) == 0) {
+                    errors_.push_back(std::string("undefined short option: -") + last);
+                    continue;
+                }
+                if (lookup[last] == "") {
+                    errors_.push_back(std::string("ambiguous short option: -") + last);
+                    continue;
+                }
+
+                if (i + 1 < argc && options_[lookup[last]]->has_value()) {
+                    set_option(lookup[last], argv[i + 1]);
+                    i++;
+                } else {
+                    set_option(lookup[last]);
+                }
+            } else {
+                others_.push_back(argv[i]);
+            }
+        }
+
+        for (std::map<std::string, option_base *>::iterator p = options_.begin();
+             p != options_.end(); p++)
+            if (!p->second->valid())
+                errors_.push_back("need option: --" + std::string(p->first));
+
+        return errors_.size() == 0;
     }
-    return oss.str();
-  }
+
+    void parse_check(const std::string &arg)
+    {
+        if (!options_.count("help"))
+            add("help", '?', "print this message");
+        check(0, parse(arg));
+    }
+
+    void parse_check(const std::vector<std::string> &args)
+    {
+        if (!options_.count("help"))
+            add("help", '?', "print this message");
+        check(static_cast<int>(args.size()), parse(args));
+    }
+
+    void parse_check(int argc, char *argv[])
+    {
+        if (!options_.count("help"))
+            add("help", '?', "print this message");
+        check(argc, parse(argc, argv));
+    }
+
+    std::string error() const
+    {
+        return errors_.size() > 0 ? errors_[0] : "";
+    }
+
+    std::string error_full() const
+    {
+        std::ostringstream oss;
+        for (size_t i = 0; i < errors_.size(); i++)
+            oss << errors_[i] << std::endl;
+        return oss.str();
+    }
+
+    std::string usage() const
+    {
+        std::ostringstream oss;
+        oss << "usage: " << prog_name_ << " ";
+        for (size_t i = 0; i < ordered_.size(); i++) {
+            if (ordered_[i]->must())
+                oss << ordered_[i]->short_description() << " ";
+        }
+
+        oss << "[options] ... " << ftr_ << std::endl;
+        oss << "options:" << std::endl;
+
+        size_t max_width = 0;
+        for (size_t i = 0; i < ordered_.size(); i++) {
+            max_width = std::max(max_width, ordered_[i]->name().length());
+        }
+        for (size_t i = 0; i < ordered_.size(); i++) {
+            if (ordered_[i]->short_name()) {
+                oss << "  -" << ordered_[i]->short_name() << ", ";
+            } else {
+                oss << "      ";
+            }
+
+            oss << "--" << ordered_[i]->name();
+            for (size_t j = ordered_[i]->name().length(); j < max_width + 4; j++)
+                oss << ' ';
+            oss << ordered_[i]->description() << std::endl;
+        }
+        return oss.str();
+    }
 
 private:
+    void check(int argc, bool ok)
+    {
+        if ((argc == 1 && !ok) || exist("help")) {
+            std::cerr << usage();
+            exit(0);
+        }
 
-  void check(int argc, bool ok){
-    if ((argc==1 && !ok) || exist("help")){
-      std::cerr<<usage();
-      exit(0);
+        if (!ok) {
+            std::cerr << error() << std::endl
+                      << usage();
+            exit(1);
+        }
     }
 
-    if (!ok){
-      std::cerr<<error()<<std::endl<<usage();
-      exit(1);
-    }
-  }
-
-  void set_option(const std::string &name){
-    if (options.count(name)==0){
-      errors.push_back("undefined option: --"+name);
-      return;
-    }
-    if (!options[name]->set()){
-      errors.push_back("option needs value: --"+name);
-      return;
-    }
-  }
-
-  void set_option(const std::string &name, const std::string &value){
-    if (options.count(name)==0){
-      errors.push_back("undefined option: --"+name);
-      return;
-    }
-    if (!options[name]->set(value)){
-      errors.push_back("option value is invalid: --"+name+"="+value);
-      return;
-    }
-  }
-
-  class option_base{
-  public:
-    virtual ~option_base(){}
-
-    virtual bool has_value() const=0;
-    virtual bool set()=0;
-    virtual bool set(const std::string &value)=0;
-    virtual bool has_set() const=0;
-    virtual bool valid() const=0;
-    virtual bool must() const=0;
-
-    virtual const std::string &name() const=0;
-    virtual char short_name() const=0;
-    virtual const std::string &description() const=0;
-    virtual std::string short_description() const=0;
-  };
-
-  class option_without_value : public option_base {
-  public:
-    option_without_value(const std::string &full_name,
-                         char short_name,
-                         const std::string &description)
-      :nam(full_name), snam(short_name), desc(description), has(false){
-    }
-    ~option_without_value(){}
-
-    bool has_value() const { return false; }
-
-    bool set(){
-      has=true;
-      return true;
+    void set_option(const std::string &name)
+    {
+        if (options_.count(name) == 0) {
+            errors_.push_back("undefined option: --" + name);
+            return;
+        }
+        if (!options_[name]->set()) {
+            errors_.push_back("option needs value: --" + name);
+            return;
+        }
     }
 
-    bool set(const std::string &){
-      return false;
+    void set_option(const std::string &name, const std::string &value)
+    {
+        if (options_.count(name) == 0) {
+            errors_.push_back("undefined option: --" + name);
+            return;
+        }
+        if (!options_[name]->set(value)) {
+            errors_.push_back("option value is invalid: --" + name + "=" + value);
+            return;
+        }
     }
 
-    bool has_set() const {
-      return has;
-    }
+    class option_base
+    {
+    public:
+        virtual ~option_base() = default;
 
-    bool valid() const{
-      return true;
-    }
+        virtual bool has_value() const = 0;
+        virtual bool set() = 0;
+        virtual bool set(const std::string &value) = 0;
+        virtual bool has_set() const = 0;
+        virtual bool valid() const = 0;
+        virtual bool must() const = 0;
 
-    bool must() const{
-      return false;
-    }
+        virtual const std::string &name() const = 0;
+        virtual char short_name() const = 0;
+        virtual const std::string &description() const = 0;
+        virtual std::string short_description() const = 0;
+    };
 
-    const std::string &name() const{
-      return nam;
-    }
+    class option_without_value : public option_base
+    {
+    public:
+        option_without_value(const std::string &full_name,
+                             char short_name,
+                             const std::string &description)
+            : nam_(full_name)
+            , snam_(short_name)
+            , desc_(description)
+            , has_(false)
+        {
+        }
+        ~option_without_value() = default;
 
-    char short_name() const{
-      return snam;
-    }
+        bool has_value() const
+        {
+            return false;
+        }
 
-    const std::string &description() const {
-      return desc;
-    }
+        bool set()
+        {
+            has_ = true;
+            return true;
+        }
 
-    std::string short_description() const{
-      return "--"+nam;
-    }
+        bool set(const std::string &)
+        {
+            return false;
+        }
 
-  private:
-    std::string nam;
-    char snam;
-    std::string desc;
-    bool has;
-  };
+        bool has_set() const
+        {
+            return has_;
+        }
 
-  template <class T>
-  class option_with_value : public option_base {
-  public:
-    option_with_value(const std::string &full_name,
-                      char short_name,
-                      bool is_needed,
-                      const T &definition,
-                      const std::string &description)
-      : nam(full_name), snam(short_name), need(is_needed), has(false)
-      , def(definition), actual(definition) {
-      this->desc=full_description(description);
-    }
-    ~option_with_value(){}
+        bool valid() const
+        {
+            return true;
+        }
 
-    const T &get() const {
-      return actual;
-    }
+        bool must() const
+        {
+            return false;
+        }
 
-    bool has_value() const { return true; }
+        const std::string &name() const
+        {
+            return nam_;
+        }
 
-    bool set(){
-      return false;
-    }
+        char short_name() const
+        {
+            return snam_;
+        }
 
-    bool set(const std::string &value){
-      try{
-        actual=read(value);
-        has=true;
-      }
-      catch(const std::exception &){
-        return false;
-      }
-      return true;
-    }
+        const std::string &description() const
+        {
+            return desc_;
+        }
 
-    bool has_set() const{
-      return has;
-    }
+        std::string short_description() const
+        {
+            return "--" + nam_;
+        }
 
-    bool valid() const{
-      if (need && !has) return false;
-      return true;
-    }
+    private:
+        const std::string nam_;
+        const char snam_;
+        const std::string desc_;
+        bool has_;
+    };
 
-    bool must() const{
-      return need;
-    }
+    template<class T>
+    class option_with_value : public option_base
+    {
+    public:
+        option_with_value(const std::string &full_name,
+                          char short_name,
+                          bool is_needed,
+                          const T &definition,
+                          const std::string &description)
+            : nam_(full_name)
+            , snam_(short_name)
+            , need_(is_needed)
+            , has_(false)
+            , def_(definition)
+            , actual_(definition)
+        {
+            this->desc_ = full_description(description);
+        }
+        ~option_with_value() = default;
 
-    const std::string &name() const{
-      return nam;
-    }
+        const T &get() const
+        {
+            return actual_;
+        }
 
-    char short_name() const{
-      return snam;
-    }
+        bool has_value() const
+        {
+            return true;
+        }
 
-    const std::string &description() const {
-      return desc;
-    }
+        bool set()
+        {
+            return false;
+        }
 
-    std::string short_description() const{
-      return "--"+nam+"="+detail::readable_typename<T>();
-    }
+        bool set(const std::string &value)
+        {
+            try {
+                actual_ = read(value);
+                has_ = true;
+            } catch (const std::exception &) {
+                return false;
+            }
+            return true;
+        }
 
-  protected:
-    std::string full_description(const std::string &description){
-      return
-        description+" ("+detail::readable_typename<T>()+
-        (need?"":" [="+detail::default_value<T>(def)+"]")
-        +")";
-    }
+        bool has_set() const
+        {
+            return has_;
+        }
 
-    virtual T read(const std::string &s)=0;
+        bool valid() const
+        {
+            if (need_ && !has_)
+                return false;
+            return true;
+        }
 
-    std::string nam;
-    char snam;
-    bool need;
-    std::string desc;
+        bool must() const
+        {
+            return need_;
+        }
 
-    bool has;
-    T def;
-    T actual;
-  };
+        const std::string &name() const
+        {
+            return nam_;
+        }
 
-  template <class T, class F>
-  class option_with_value_with_reader : public option_with_value<T> {
-  public:
-    option_with_value_with_reader(const std::string &full_name,
-                                  char short_name,
-                                  bool is_needed,
-                                  const T definition,
-                                  const std::string &description,
-                                  F value_reader)
-      : option_with_value<T>(full_name, short_name, is_needed, definition, description), reader(value_reader){
-    }
+        char short_name() const
+        {
+            return snam_;
+        }
 
-  private:
-    T read(const std::string &s){
-      return reader(s);
-    }
+        const std::string &description() const
+        {
+            return desc_;
+        }
 
-    F reader;
-  };
+        std::string short_description() const
+        {
+            return "--" + nam_ + "=" + detail::readable_typename<T>();
+        }
 
-  std::map<std::string, option_base*> options;
-  std::vector<option_base*> ordered;
-  std::string ftr;
+    protected:
+        std::string full_description(const std::string &description)
+        {
+            return description + " (" + detail::readable_typename<T>() + (need_ ? "" : " [=" + detail::default_value<T>(def_) + "]")
+                + ")";
+        }
 
-  std::string prog_name;
-  std::vector<std::string> others;
+        virtual T read(const std::string &s) = 0;
 
-  std::vector<std::string> errors;
+        const std::string nam_;
+        const char snam_;
+        const bool need_;
+        std::string desc_;
+
+        bool has_;
+        const T def_;
+        T actual_;
+    };
+
+    template<class T, class F>
+    class option_with_value_with_reader : public option_with_value<T>
+    {
+    public:
+        option_with_value_with_reader(const std::string &full_name,
+                                      char short_name,
+                                      bool is_needed,
+                                      const T definition,
+                                      const std::string &description,
+                                      F value_reader)
+            : option_with_value<T>(full_name, short_name, is_needed, definition, description)
+            , reader_(value_reader)
+        {
+        }
+
+    private:
+        T read(const std::string &s)
+        {
+            return reader_(s);
+        }
+
+        F reader_;
+    };
+
+    std::map<std::string, option_base *> options_;
+    std::vector<option_base *> ordered_;
+    std::string ftr_;
+
+    std::string prog_name_;
+    std::vector<std::string> others_;
+
+    std::vector<std::string> errors_;
 };
 
-} // cmdline
+} // namespace cmdline
