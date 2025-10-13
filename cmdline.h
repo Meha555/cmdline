@@ -57,7 +57,6 @@ public:
     std::stringstream ss;
     if (!(ss<<arg && ss>>ret && ss.eof()))
       throw std::bad_cast();
-    
     return ret;
   }
 };
@@ -67,7 +66,7 @@ class lexical_cast_t<Target, Source, true>{
 public:
   static Target cast(const Source &arg){
     return arg;
-  }  
+  }
 };
 
 template <typename Source>
@@ -119,7 +118,7 @@ static inline std::string demangle(const std::string &name)
   free(p);
   return ret;
 #else
-#error unexpected c complier (msvc/gcc), Need to implement this method for demangle
+#error unexpected c complier (msvc/gnu/llvm), Need to implement this method for demangle
 #endif
 }
 
