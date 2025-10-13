@@ -36,7 +36,7 @@
 #include <typeinfo>
 #include <cstring>
 #include <algorithm>
-#if defined(__clang__) || defined(__GNUC__)
+#if !defined(_MSC_VER) && (defined(__clang__) || defined(__GNUC__))
 #include <cxxabi.h>
 #endif
 #include <cstdlib>
