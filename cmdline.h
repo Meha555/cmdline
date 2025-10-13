@@ -29,8 +29,10 @@
 
 #include <algorithm>
 #include <cstring>
+#include <functional>
 #include <iostream>
 #include <map>
+#include <memory>
 #include <sstream>
 #include <string>
 #include <typeinfo>
@@ -204,7 +206,7 @@ struct oneof_reader
             for (size_t i = 0; i < alts_.size(); ++i) {
                 msg += detail::lexical_cast<T>(alts_[i]);
                 if (i != alts_.size() - 1) {
-                   msg += ", ";
+                    msg += ", ";
                 }
             }
             msg += "]";
@@ -419,14 +421,15 @@ private:
 
 class parser
 {
+    friend class command;
+
 public:
     parser() = default;
-    ~parser()
-    {
-        for (std::map<std::string, option_base *>::iterator p = options_.begin();
-             p != options_.end(); p++)
-            delete p->second;
-    }
+    parser(const parser &other) = delete;
+    parser &operator=(const parser &other) = delete;
+    parser(parser &&other) noexcept = default;
+    parser &operator=(parser &&other) noexcept = default;
+    ~parser() = default;
 
     // add flag
     parser &add(const std::string &full_name, char short_name = 0,
@@ -434,9 +437,9 @@ public:
     {
         if (options_.count(full_name))
             throw cmdline_error("multiple definition: " + full_name);
-        options_[full_name] =
-            new option_without_value(full_name, short_name, description);
-        ordered_.push_back(options_[full_name]);
+        auto p = new option_without_value(full_name, short_name, description);
+        options_.emplace(full_name, p);
+        ordered_.push_back(p);
         return *this;
     }
 
@@ -458,23 +461,13 @@ public:
     {
         if (options_.count(full_name))
             throw cmdline_error("multiple definition: " + full_name);
-        options_[full_name] = new option_with_value_with_reader<T, R>(
+        auto p = new option_with_value_with_reader<T, R>(
             full_name, short_name, is_needed, definition, description,
             value_reader);
-        ordered_.push_back(options_[full_name]);
+        options_.emplace(full_name, p);
+        ordered_.push_back(p);
         return *this;
     }
-
-    // parser &add(const std::string &full_name, char short_name = 0,
-    //             const std::string &description = "")
-    // {
-    //     if (options_.count(full_name))
-    //         throw cmdline_error("multiple definition: " + full_name);
-    //     options_[full_name] =
-    //         new option_without_value(full_name, short_name, description);
-    //     ordered_.push_back(options_[full_name]);
-    //     return *this;
-    // }
 
     // add option with value
     template<typename T>
@@ -494,10 +487,11 @@ public:
     {
         if (options_.count(full_name))
             throw cmdline_error("multiple definition: " + full_name);
-        options_[full_name] = new option_with_value_with_reader<T, R>(
+        auto p = new option_with_value_with_reader<T, R>(
             full_name, short_name, is_needed, definition, desc,
             value_reader);
-        ordered_.push_back(options_[full_name]);
+        options_.emplace(full_name, p);
+        ordered_.push_back(p);
         return *this;
     }
 
@@ -526,7 +520,7 @@ public:
         if (options_.count(name) == 0)
             throw cmdline_error("there is no flag: --" + name);
         const option_with_value<T> *p =
-            dynamic_cast<const option_with_value<T> *>(options_.find(name)->second);
+            dynamic_cast<const option_with_value<T> *>(options_.find(name)->second.get());
         if (p == nullptr)
             throw cmdline_error("type mismatch flag '" + name + "'");
         return p->get();
@@ -993,7 +987,7 @@ private:
     };
 
     // options_ store all options in <full_name, option_base *>
-    std::map<std::string, option_base *> options_;
+    std::map<std::string, std::unique_ptr<option_base>> options_;
     // options_ are sorted by the order they are added, used for printing help
     std::vector<option_base *> ordered_;
     // footer message
@@ -1004,6 +998,34 @@ private:
     std::vector<std::string> others_;
     // errors during parsing
     std::vector<std::string> errors_;
+};
+
+class command
+{
+public:
+    using callback_t = std::function<int(parser &parser)>;
+
+    command(const std::string &name, const std::string &help, callback_t callback, parser &&parser)
+        : name_(name)
+        , help_(help)
+        , callback_(callback)
+        , parser_(std::move(parser))
+    {
+        parser.set_program_name(name);
+        parser.footer(help);
+    }
+
+    int operator()(int argc, char *argv[])
+    {
+        parser_.parse_check(argc, argv);
+        return callback_(parser_);
+    }
+
+private:
+    const std::string name_;
+    const std::string help_;
+    callback_t callback_;
+    parser parser_;
 };
 
 } // namespace cmdline
