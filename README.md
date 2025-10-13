@@ -129,6 +129,16 @@ http://github.com:80
 gzip
 ```
 
+Note:
+
+- For options which are set multiple times, the latter will overwrite the former. eg:
+- `cmdline::range()` is closed interval.
+
+```bash
+$ ./test -h 127.0.0.1 --host=localhost
+localhost:80
+```
+
 ### Extra Options
 
 #### rest of arguments
