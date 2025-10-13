@@ -159,17 +159,9 @@ class cmdline_error : public std::exception
 {
 public:
     cmdline_error(const std::string &message)
-        : msg_(message)
+        : std::exception(message.c_str())
     {
     }
-    ~cmdline_error() = default;
-    const char *what() const
-    {
-        return msg_.c_str();
-    }
-
-private:
-    std::string msg_;
 };
 
 template<class T>
@@ -192,8 +184,10 @@ struct range_reader
     T operator()(const std::string &s) const
     {
         T ret = default_reader<T>()(s);
-        if (!(ret >= low_ && ret <= high_))
-            throw cmdline::cmdline_error("range_error");
+        if (!(ret >= low_ && ret <= high_)) {
+            std::string msg = "range_error[" + std::to_string(low_) + ", " + std::to_string(high_) + "]";
+            throw cmdline::cmdline_error(msg);
+        }
         return ret;
     }
 
@@ -919,7 +913,8 @@ private:
             try {
                 actual_ = read(value);
                 has_ = true;
-            } catch (const std::exception &) {
+            } catch (const std::exception &ex) {
+                std::cerr << ex.what() << std::endl;
                 return false;
             }
             return true;
