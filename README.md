@@ -1,5 +1,7 @@
 # cmdline: A simple command line parser for C++
 
+> Extented from [cmdline](https://github.com/tanakh/cmdline)
+
 ## About
 
 This is a simple command line parser for C++.
@@ -7,6 +9,7 @@ This is a simple command line parser for C++.
 - Easy to use
 - Only one header file
 - Automatic type check
+- Support "getopt-like" style and "cobra-like" style
 
 ## Sample
 
@@ -19,6 +22,8 @@ This is an example of simple usage.
 ```cpp
 // include cmdline.h
 #include "cmdline.h"
+
+using namespace std;
 
 int main(int argc, char *argv[])
 {
@@ -139,6 +144,119 @@ $ ./test -h 127.0.0.1 --host=localhost
 localhost:80
 ```
 
+### Advance usage
+
+```cpp
+#include "cmdline.h"
+
+using namespace std;
+
+int main(int argc, char *argv[])
+{
+    // create a sub-command
+    cmdline::command subCmd("action", "sub-command action", [](cmdline::command *cmd) -> int {
+        try {
+            if (cmd->exist("host")) {
+                cout << cmd->get<string>("host") << endl;
+            }
+            if (cmd->exist("port")) {
+                cout << cmd->get<int>("port") << endl;
+            }
+            if (cmd->exist("gzip")) {
+                cout << "gzip" << endl;
+            }
+            return 0;
+        } catch (const std::exception &ex) {
+            std::cerr << ex.what() << std::endl;
+            return 1;
+        }
+    });
+    subCmd
+        .add<string>("host", 'h', cmdline::description("host name", "example:\n  --host=localhost\n  -h 127.0.0.1"), true, "")
+        .add<int>("port", 'p', "port number", false, 80, cmdline::range(1, 65535))
+        .add("gzip", '\0', "gzip when transfer")
+        .set_footer("this is footer for sub-command")
+        .set_introduction("this is introduction for sub-command");
+
+    // root command
+    cmdline::command rootCmd("test", "test cobra-like options", [](cmdline::command *cmd) -> int {
+        try {
+            if (cmd->exist("version")) {
+                cout << "0.1.0" << endl;
+            } else if (cmd->exist("type")){
+                cout << cmd->get<string>("type") << endl;
+            }
+            return 0;
+        } catch (const std::exception &ex) {
+            std::cerr << ex.what() << std::endl;
+            return 1;
+        }
+    });
+    rootCmd
+        .add<string>("type", 't', "protocol type", false, "http", cmdline::oneof<string>("http", "https", "ssh", "ftp"))
+        .add("version", 'v', "version number")
+        .set_footer("this is footer for root command")
+        .set_introduction("this is introduction for root command");
+
+    // add subcommands
+    rootCmd.add(std::move(subCmd));
+
+    // execute
+    return rootCmd(argc, argv);
+}
+```
+
+Here are some execution results:
+
+```bash
+$ ./test -?
+usage: test [command] [options] ... this is footer for root command
+this is introduction for root command
+
+commands:
+  action          sub-command action
+options:
+  -t, --type       protocol type (string)
+  -v, --version    version number
+  -?, --help       print this message
+```
+
+```bash
+$ ./test action -?
+usage: test action [command] [options] ... this is footer for sub-command
+this is introduction for sub-command
+
+--host=string options:
+  -h, --host    host name (string)
+                  example:
+                    --host=localhost
+                    -h 127.0.0.1
+  -p, --port    port number (int)
+      --gzip    gzip when transfer
+  -?, --help    print this message
+```
+
+```bash
+$ ./test action --host=127.0.0.1 --port=123 --gzip
+127.0.0.1
+123
+gzip
+```
+
+```bash
+$ ./test --host=127.0.0.1 --port=123 --gzip
+undefined option: --host
+usage: test [command] [options] ... this is footer for root command
+this is introduction for root command
+
+commands:
+  action          sub-command action
+options:
+  -t, --type       protocol type (string)
+  -v, --version    version number
+  -?, --help       print this message
+```
+
 ### Extra Options
 
 #### rest of arguments
@@ -154,11 +272,11 @@ for (int i = 0; i < a.rest().size(); i++)
 
 #### footer
 
-`footer()` method is add a footer text of usage.
+`set_footer()` method is add a footer text of usage.
 
 ```cpp
 ...
-a.footer("filename ...");
+a.set_footer("filename ...");
 ...
 ```
 

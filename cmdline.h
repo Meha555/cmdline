@@ -1,36 +1,11 @@
-/*
-  Copyright (c) 2009, Hideyuki Tanaka
-  All rights reserved.
-
-  Redistribution and use in source and binary forms, with or without
-  modification, are permitted provided that the following conditions are met:
-  * Redistributions of source code must retain the above copyright
-  notice, this list of conditions and the following disclaimer.
-  * Redistributions in binary form must reproduce the above copyright
-  notice, this list of conditions and the following disclaimer in the
-  documentation and/or other materials provided with the distribution.
-  * Neither the name of the <organization> nor the
-  names of its contributors may be used to endorse or promote products
-  derived from this software without specific prior written permission.
-
-  THIS SOFTWARE IS PROVIDED BY <copyright holder> ''AS IS'' AND ANY
-  EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-  WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-  DISCLAIMED. IN NO EVENT SHALL <copyright holder> BE LIABLE FOR ANY
-  DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-  (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
-  LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
-  ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-  (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-  SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-*/
-
 #pragma once
 
 #include <algorithm>
 #include <cstring>
+#include <functional>
 #include <iostream>
 #include <map>
+#include <memory>
 #include <sstream>
 #include <string>
 #include <typeinfo>
@@ -61,9 +36,8 @@ namespace detail
 {
 
 template<typename Target, typename Source, bool Same>
-class lexical_cast_t
+struct lexical_cast_t
 {
-public:
     static Target cast(const Source &arg)
     {
         Target ret;
@@ -75,9 +49,8 @@ public:
 };
 
 template<typename Target, typename Source>
-class lexical_cast_t<Target, Source, true>
+struct lexical_cast_t<Target, Source, true>
 {
-public:
     static Target cast(const Source &arg)
     {
         return arg;
@@ -85,9 +58,8 @@ public:
 };
 
 template<typename Source>
-class lexical_cast_t<std::string, Source, false>
+struct lexical_cast_t<std::string, Source, false>
 {
-public:
     static std::string cast(const Source &arg)
     {
         std::ostringstream ss;
@@ -97,9 +69,8 @@ public:
 };
 
 template<typename Target>
-class lexical_cast_t<Target, std::string, false>
+struct lexical_cast_t<Target, std::string, false>
 {
-public:
     static Target cast(const std::string &arg)
     {
         Target ret;
@@ -204,7 +175,7 @@ struct oneof_reader
             for (size_t i = 0; i < alts_.size(); ++i) {
                 msg += detail::lexical_cast<T>(alts_[i]);
                 if (i != alts_.size() - 1) {
-                   msg += ", ";
+                    msg += ", ";
                 }
             }
             msg += "]";
@@ -421,22 +392,21 @@ class parser
 {
 public:
     parser() = default;
-    ~parser()
-    {
-        for (std::map<std::string, option_base *>::iterator p = options_.begin();
-             p != options_.end(); p++)
-            delete p->second;
-    }
+    parser(const parser &other) = delete;
+    parser &operator=(const parser &other) = delete;
+    parser(parser &&other) noexcept = default;
+    parser &operator=(parser &&other) noexcept = default;
+    ~parser() = default;
 
     // add flag
     parser &add(const std::string &full_name, char short_name = 0,
                 const std::string &description = "")
     {
         if (options_.count(full_name))
-            throw cmdline_error("multiple definition: " + full_name);
-        options_[full_name] =
-            new option_without_value(full_name, short_name, description);
-        ordered_.push_back(options_[full_name]);
+            throw cmdline_error("multiple flag definition: " + full_name);
+        auto p = new option_without_value(full_name, short_name, description);
+        options_.emplace(full_name, p);
+        ordered_.push_back(p);
         return *this;
     }
 
@@ -457,24 +427,14 @@ public:
                 const T definition = T(), R value_reader = R())
     {
         if (options_.count(full_name))
-            throw cmdline_error("multiple definition: " + full_name);
-        options_[full_name] = new option_with_value_with_reader<T, R>(
+            throw cmdline_error("multiple option definition: " + full_name);
+        auto p = new option_with_value_with_reader<T, R>(
             full_name, short_name, is_needed, definition, description,
             value_reader);
-        ordered_.push_back(options_[full_name]);
+        options_.emplace(full_name, p);
+        ordered_.push_back(p);
         return *this;
     }
-
-    // parser &add(const std::string &full_name, char short_name = 0,
-    //             const std::string &description = "")
-    // {
-    //     if (options_.count(full_name))
-    //         throw cmdline_error("multiple definition: " + full_name);
-    //     options_[full_name] =
-    //         new option_without_value(full_name, short_name, description);
-    //     ordered_.push_back(options_[full_name]);
-    //     return *this;
-    // }
 
     // add option with value
     template<typename T>
@@ -493,17 +453,23 @@ public:
                 const T definition = T(), R value_reader = R())
     {
         if (options_.count(full_name))
-            throw cmdline_error("multiple definition: " + full_name);
-        options_[full_name] = new option_with_value_with_reader<T, R>(
+            throw cmdline_error("multiple option definition: " + full_name);
+        auto p = new option_with_value_with_reader<T, R>(
             full_name, short_name, is_needed, definition, desc,
             value_reader);
-        ordered_.push_back(options_[full_name]);
+        options_.emplace(full_name, p);
+        ordered_.push_back(p);
         return *this;
     }
 
-    parser &footer(const std::string &f)
+    parser &set_footer(const std::string &f)
     {
         ftr_ = f;
+        return *this;
+    }
+
+    parser &set_introduction(const std::string &intro) {
+        intro_ = intro;
         return *this;
     }
 
@@ -515,9 +481,10 @@ public:
 
     bool exist(const std::string &name) const
     {
-        if (options_.count(name) == 0)
+        auto it = options_.find(name);
+        if (it == options_.end())
             throw cmdline_error("there is no flag: --" + name);
-        return options_.find(name)->second->has_set();
+        return it->second->has_set();
     }
 
     template<typename T>
@@ -526,7 +493,7 @@ public:
         if (options_.count(name) == 0)
             throw cmdline_error("there is no flag: --" + name);
         const option_with_value<T> *p =
-            dynamic_cast<const option_with_value<T> *>(options_.find(name)->second);
+            dynamic_cast<const option_with_value<T> *>(options_.find(name)->second.get());
         if (p == nullptr)
             throw cmdline_error("type mismatch flag '" + name + "'");
         return p->get();
@@ -537,13 +504,13 @@ public:
         return others_;
     }
 
-    bool parse(const std::string &arg)
+    bool parse(const std::string &arg, bool with_program_name = true)
     {
         std::vector<std::string> args;
 
         std::string buf;
         bool in_quote = false;
-        for (std::string::size_type i = 0; i < arg.length(); i++) {
+        for (std::string::size_type i = 0; i < arg.size(); i++) {
             if (arg[i] == '\"') {
                 in_quote = !in_quote;
                 continue;
@@ -557,7 +524,7 @@ public:
 
             if (arg[i] == '\\') {
                 i++;
-                if (i >= arg.length()) {
+                if (i >= arg.size()) {
                     errors_.push_back("unexpected occurrence of '\\' at end of string");
                     return false;
                 }
@@ -571,16 +538,16 @@ public:
             return false;
         }
 
-        if (buf.length() > 0)
+        if (buf.size() > 0)
             args.push_back(buf);
 
         for (size_t i = 0; i < args.size(); i++)
             std::cout << "\"" << args[i] << "\"" << std::endl;
 
-        return parse(args);
+        return parse(args, with_program_name);
     }
 
-    bool parse(const std::vector<std::string> &args)
+    bool parse(const std::vector<std::string> &args, bool with_program_name = true)
     {
         int argc = static_cast<int>(args.size());
         std::vector<const char *> argv(argc);
@@ -588,10 +555,10 @@ public:
         for (int i = 0; i < argc; i++)
             argv[i] = args[i].c_str();
 
-        return parse(argc, &argv[0]);
+        return parse(argc, argv.data(), with_program_name);
     }
 
-    bool parse(int argc, const char *const argv[])
+    bool parse(int argc, const char *const argv[], bool with_program_name = true)
     {
         errors_.clear();
         others_.clear();
@@ -619,7 +586,7 @@ public:
             }
         }
         // parse argv
-        for (int i = 1; i < argc; i++) {
+        for (int i = with_program_name ? 1 : 0; i < argc; i++) {
             // if is long option "--xxx"
             if (std::strncmp(argv[i], "--", 2) == 0) {
                 const char *eq = std::strchr(argv[i] + 2, '=');
@@ -629,12 +596,13 @@ public:
                     set_option(name, value);
                 } else {
                     std::string name(argv[i] + 2);
-                    if (options_.count(name) == 0) {
+                    auto it = options_.find(name);
+                    if (it == options_.end()) {
                         errors_.push_back("undefined option: --" + name);
                         continue;
                     }
                     // an option with value
-                    if (options_[name]->has_value()) {
+                    if (it->second->has_value()) {
                         if (i + 1 < argc) {
                             set_option(name, argv[++i]);
                         } else {
@@ -685,25 +653,26 @@ public:
         return errors_.empty();
     }
 
-    void parse_check(const std::string &arg)
+    void parse_check(const std::string &arg, bool with_program_name = true)
     {
         if (!options_.count("help"))
             add("help", '?', "print this message");
-        check(0, parse(arg));
+        check(with_program_name ? 0 : 1, parse(arg, with_program_name));
     }
 
-    void parse_check(const std::vector<std::string> &args)
+    void parse_check(const std::vector<std::string> &args, bool with_program_name = true)
     {
         if (!options_.count("help"))
             add("help", '?', "print this message");
-        check(static_cast<int>(args.size()), parse(args));
+        int argc = static_cast<int>(args.size());
+        check(with_program_name ? argc : argc + 1, parse(args, with_program_name));
     }
 
-    void parse_check(int argc, char *argv[])
+    void parse_check(int argc, char *argv[], bool with_program_name = true)
     {
         if (!options_.count("help"))
             add("help", '?', "print this message");
-        check(argc, parse(argc, argv));
+        check(with_program_name ? argc : argc + 1, parse(argc, argv, with_program_name));
     }
 
     std::string error() const
@@ -715,63 +684,85 @@ public:
     {
         std::ostringstream oss;
         for (size_t i = 0; i < errors_.size(); i++)
-            oss << errors_[i] << std::endl;
+            oss << errors_[i] << '\n';
         return oss.str();
     }
 
-    std::string usage() const
+    std::string help() const
     {
         std::ostringstream oss;
-        oss << "usage: " << prog_name_ << " ";
-        for (size_t i = 0; i < ordered_.size(); i++) {
-            if (ordered_[i]->must())
-                oss << ordered_[i]->short_description() << " ";
+        oss << "usage: " << prog_name_ << ' ' << usage();
+        if (intro_ != "")
+            oss << intro_ << "\n\n";
+        usage(oss);
+        return oss.str();
+    }
+
+protected:
+    virtual std::string usage() const
+    {
+        return "[options] ... " + ftr_ + '\n';
+    }
+
+    virtual void usage(std::ostringstream &oss) const
+    {
+        if (options_.empty())
+            return;
+
+        for (const auto &opt : ordered_) {
+            if (opt->must())
+                oss << opt->short_description() << ' ';
         }
 
-        oss << "[options] ... " << ftr_ << std::endl;
-        oss << "options:" << std::endl;
+        oss << "options:\n";
 
-        size_t max_width = 0;
-        for (size_t i = 0; i < ordered_.size(); i++) {
-            max_width = std::max(max_width, ordered_[i]->name().length());
-        }
-        for (size_t i = 0; i < ordered_.size(); i++) {
-            if (ordered_[i]->short_name()) {
-                oss << "  -" << ordered_[i]->short_name() << ", ";
+        size_t width = max_width();
+        for (const auto &opt : ordered_) {
+            if (opt->short_name()) {
+                oss << "  -" << opt->short_name() << ", ";
             } else {
                 oss << "      ";
             }
 
-            oss << "--" << ordered_[i]->name();
-            for (size_t j = ordered_[i]->name().size(); j < max_width + 4; j++)
+            oss << "--" << opt->name();
+            for (size_t j = opt->name().size(); j < width + 4; j++)
                 oss << ' ';
-            oss << ordered_[i]->description(max_width + 12 + 2) << std::endl;
+            oss << opt->description(width + 12 + 2) << std::endl;
         }
-        return oss.str();
+    }
+
+    virtual size_t max_width() const
+    {
+        size_t max_width = 0;
+        for (const auto &opt : ordered_) {
+            max_width = std::max(max_width, opt->name().size());
+        }
+        return max_width;
     }
 
 private:
-    void check(int argc, bool ok)
+    void check(int argc, bool ok) const
     {
         if ((argc == 1 && !ok) || exist("help")) {
-            std::cerr << usage();
-            std::exit(0);
+            std::cerr << help();
+            std::exit(!ok);
         }
 
         if (!ok) {
             std::cerr << error() << '\n'
-                      << usage();
+                      << help();
             std::exit(1);
         }
     }
 
     bool check_short_option(std::map<char, std::string> &lookup, char option)
     {
-        if (lookup.count(option) == 0) {
+        auto it = lookup.find(option);
+        if (it == lookup.end()) {
             errors_.push_back(std::string("undefined short option: -") + option);
             return false;
         }
-        if (lookup[option] == "") {
+        if (it->second == "") {
             errors_.push_back(std::string("ambiguous short option: -") + option);
             return false;
         }
@@ -780,11 +771,12 @@ private:
 
     void set_option(const std::string &name)
     {
-        if (options_.count(name) == 0) {
+        auto it = options_.find(name);
+        if (it == options_.end()) {
             errors_.push_back("undefined option: --" + name);
             return;
         }
-        if (!options_[name]->set()) {
+        if (!it->second->set()) {
             errors_.push_back("option needs value: --" + name);
             return;
         }
@@ -792,11 +784,12 @@ private:
 
     void set_option(const std::string &name, const std::string &value)
     {
-        if (options_.count(name) == 0) {
+        auto it = options_.find(name);
+        if (it == options_.end()) {
             errors_.push_back("undefined option: --" + name);
             return;
         }
-        if (!options_[name]->set(value)) {
+        if (!it->second->set(value)) {
             errors_.push_back("option value is invalid: --" + name + "=" + value);
             return;
         }
@@ -992,18 +985,148 @@ private:
         R reader_;
     };
 
-    // options_ store all options in <full_name, option_base *>
-    std::map<std::string, option_base *> options_;
-    // options_ are sorted by the order they are added, used for printing help
-    std::vector<option_base *> ordered_;
-    // footer message
-    std::string ftr_;
+protected:
     // program name
     std::string prog_name_;
+
+private:
+    // options_ store all options in <full_name, option_base *>
+    std::map<std::string, std::unique_ptr<option_base>> options_;
+    // options_ are sorted by the order they are added, used for printing help
+    std::vector<option_base *> ordered_;
+    // introduction message
+    std::string intro_;
+    // footer message
+    std::string ftr_;
     // other arguments not parsed as options
     std::vector<std::string> others_;
     // errors during parsing
     std::vector<std::string> errors_;
+};
+
+class command : public parser
+{
+public:
+    // enable parser::add
+    using parser::add;
+    // Here, passing a pointer also has an advantage that allows the callback function to use polymorphism.
+    using callback_t = std::function<int(command *cmd)>;
+
+    command(const std::string &name, const std::string &desc, const callback_t &callback)
+        : name_(name)
+        , desc_(desc)
+        , callback_(callback)
+    {
+        set_program_name(name);
+    }
+    command(const command &other) = delete;
+    command &operator=(const command &other) = delete;
+    command(command &&other) noexcept = default;
+    command &operator=(command &&other) noexcept = delete;
+
+    // for root command
+    int operator()(int argc, char *argv[])
+    {
+        bool has_cmd = true;
+        if (argc < 2 || std::strncmp("-", argv[1], 1) == 0) {
+            has_cmd = false;
+        }
+        int retcode = 0;
+        if (has_cmd) {
+            const std::string cmd_name = argv[1];
+            auto it = subcommands_.find(cmd_name);
+            if (it == subcommands_.end()) {
+                // throw cmdline_error("undefined command: " + cmd_name);
+                std::cerr << "undefined command: " << cmd_name << std::endl;
+                retcode = 1;
+            } else {
+                retcode = it->second(prog_name_ + " " + cmd_name, argc - 2, argv + 2);
+            }
+        } else {
+            parse_check(argc, argv);
+            retcode = run();
+        }
+        return retcode;
+    }
+
+    command &add(command &&cmd)
+    {
+        auto res = subcommands_.emplace(cmd.name_, std::move(cmd));
+        if (!res.second)
+            throw cmdline_error("multiple command definition: " + cmd.name_);
+        ordered_.push_back(res.first);
+        return *this;
+    }
+
+    const std::string &name() const
+    {
+        return name_;
+    }
+
+    const std::string &description() const
+    {
+        return desc_;
+    }
+
+protected:
+    std::string usage() const override
+    {
+        return "[command] " + parser::usage();
+    }
+
+    void usage(std::ostringstream &oss) const override
+    {
+        if (!subcommands_.empty()) {
+            size_t max_width = 0;
+            for (const auto &cmd : ordered_) {
+                max_width = std::max(max_width, cmd->second.name().size());
+            }
+            oss << "commands:\n";
+            for (const auto &cmd : ordered_) {
+                oss << "  " << cmd->first << ' ';
+                for (size_t j = cmd->first.size(); j < max_width + 9; ++j)
+                    oss << ' ';
+                oss << cmd->second.description() << '\n';
+            }
+        }
+
+        parser::usage(oss);
+    }
+
+    size_t max_width() const override
+    {
+        size_t max_width = parser::max_width();
+        for (const auto &cmd : ordered_) {
+            max_width = std::max(max_width, cmd->second.name().size());
+        }
+        return max_width;
+    }
+
+private:
+    // for sub commands
+    int operator()(const std::string &cmd_name, int argc, char *argv[])
+    {
+        set_program_name(cmd_name);
+        parse_check(argc, argv, false);
+        return run();
+    }
+
+    int run()
+    {
+        int retcode = 0;
+        // prev hooks
+        retcode = callback_(this);
+        // post hooks
+        return retcode;
+    }
+
+    const std::string name_;
+    const std::string desc_;
+    callback_t callback_;
+
+    using command_map_t = std::map<std::string, command>;
+    command_map_t subcommands_;
+    std::vector<command_map_t::iterator> ordered_;
 };
 
 } // namespace cmdline
