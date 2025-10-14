@@ -897,9 +897,8 @@ private:
         option_with_value(const std::string &full_name, char short_name,
                           bool is_needed, const T &definition,
                           const class description &description)
-            : option_base(full_name, short_name, full_description(description))
+            : option_base(full_name, short_name, full_description(description, is_needed, definition))
             , need_(is_needed)
-            , def_(definition)
             , actual_(definition)
         {
         }
@@ -950,15 +949,14 @@ private:
         }
 
     protected:
-        class description full_description(const class description &desc)
+        class description full_description(const class description &desc, bool need, const T &def)
         {
-            return cmdline::description(desc.brief() + " (" + detail::readable_typename<T>() + (need_ ? "" : " [=" + detail::default_value<T>(def_) + "]") + ")", desc.detail());
+            return cmdline::description(desc.brief() + " (" + detail::readable_typename<T>() + (need ? "" : " [=" + detail::default_value<T>(def) + "]") + ")", desc.detail());
         }
 
         virtual T read(const std::string &s) = 0;
 
         const bool need_;
-        const T def_;
         T actual_;
     };
 
