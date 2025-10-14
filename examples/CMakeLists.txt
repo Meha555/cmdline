@@ -1,3 +1,6 @@
+add_executable(exp0 exp0.cpp)
+target_link_libraries(exp0 PRIVATE cmdline)
+
 add_executable(exp1 exp1.cpp)
 target_link_libraries(exp1 PRIVATE cmdline)
 

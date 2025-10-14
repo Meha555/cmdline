@@ -2,80 +2,76 @@
 
 using namespace std;
 
-void direct_parser_example(int argc, char *argv[])
-{
-    cout << "=== Direct Parser Example ===" << endl;
-    
-    cmdline::parser a;
-    a.add<string>("host", 'h', cmdline::description("host name", "example:\n  --host=localhost\n  -h 127.0.0.1"), true, "");
-    a.add<int>("port", 'p', "port number", false, 80, cmdline::range(1, 65535));
-    a.add<string>("type", 't', "protocol type", false, "http", cmdline::oneof<string>("http", "https", "ssh", "ftp"));
-    a.add("gzip", '\0', "gzip when transfer");
-    a.set_program_name("direct_example");
-    
-    // 解析命令行参数
-    a.parse_check(argc, argv);
-    
-    // 输出解析结果
-    cout << a.get<string>("type") << "://"
-         << a.get<string>("host") << ":"
-         << a.get<int>("port") << endl;
-
-    if (a.exist("gzip"))
-        cout << "gzip enabled" << endl;
-        
-    cout << endl;
-}
-
-int command_example(int argc, char *argv[])
-{
-    cout << "=== Command Example ===" << endl;
-    
-    cmdline::parser a;
-    a.add<string>("host", 'h', cmdline::description("host name", "example:\n  --host=localhost\n  -h 127.0.0.1"), true, "");
-    a.add<int>("port", 'p', "port number", false, 80, cmdline::range(1, 65535));
-    a.add<string>("type", 't', "protocol type", false, "http", cmdline::oneof<string>("http", "https", "ssh", "ftp"));
-    a.add("gzip", '\0', "gzip when transfer");
-
-    cmdline::command rootCmd("myapp", "A simple example of cmdline library", [](cmdline::parser &a) {
-        cout << a.get<string>("type") << "://"
-             << a.get<string>("host") << ":"
-             << a.get<int>("port") << endl;
-
-        if (a.exist("gzip"))
-            cout << "gzip enabled" << endl;
-        return 0;
-    },
-                             std::move(a));
-
-    return rootCmd(argc, argv);
-}
-
 int main(int argc, char *argv[])
 {
-    // 如果没有提供参数，显示帮助信息
-    if (argc == 1) {
-        cout << "Usage: " << argv[0] << " [direct|command] [options...]" << endl;
-        cout << "  direct    Run direct parser example" << endl;
-        cout << "  command   Run command example" << endl;
-        return 0;
-    }
-    
-    // 根据第一个参数决定运行哪个示例
-    string mode = argv[1];
-    
-    // 调整argc和argv以跳过第一个参数
-    argc--;
-    argv++;
-    
-    if (mode == "direct") {
-        direct_parser_example(argc, argv);
-        return 0;
-    } else if (mode == "command") {
-        return command_example(argc, argv);
-    } else {
-        cout << "Unknown mode: " << mode << endl;
-        cout << "Usage: " << argv[0] << " [direct|command] [options...]" << endl;
-        return 1;
-    }
+    // image command
+    cmdline::command imageCmd("image", "image management", [](cmdline::command *cmd) -> int {
+        try {
+            // allow combined options
+            if (cmd->exist("ls")) {
+                cout << "list all images" << endl;
+            }
+            if (cmd->exist("introspect")) {
+                cout << "introspect image: " << cmd->get<string>("introspect") << endl;
+            }
+            return 0;
+        } catch (const std::exception &ex) {
+            std::cerr << ex.what() << std::endl;
+            return 1;
+        }
+    });
+    imageCmd
+        .add("ls", 'l', "list all images")
+        .add<string>("introspect", 'i', "introspect an image", false, "");
+
+    // container command
+    cmdline::command containerCmd("container", "container management", [](cmdline::command *cmd) -> int {
+        try {
+            // allow combined options
+            if (cmd->exist("ls")) {
+                cout << "list all containers" << endl;
+            }
+            if (cmd->exist("introspect")) {
+                cout << "introspect container: " << cmd->get<string>("introspect") << endl;
+            }
+            return 0;
+        } catch (const std::exception &ex) {
+            std::cerr << ex.what() << std::endl;
+            return 1;
+        }
+    });
+    containerCmd
+        .add("ls", 'l', "list all containers")
+        .add<string>("introspect", 'i', "introspect a container", false, "");
+
+    // root command
+    cmdline::command rootCmd("mydocker", "my docker client", [](cmdline::command *cmd) -> int {
+        try {
+            if (cmd->exist("version")) {
+                cout << "0.1.0" << endl;
+            } else {
+                if (cmd->exist("pull")) {
+                    cout << "pull image: " << cmd->get<string>("pull") << endl;
+                }
+                if (cmd->exist("run")) {
+                    cout << "run container: " << cmd->get<string>("run") << endl;
+                }
+            }
+            return 0;
+        } catch (const std::exception &ex) {
+            std::cerr << ex.what() << std::endl;
+            return 1;
+        }
+    });
+    rootCmd
+        .add<string>("pull", 0, "pull an image", false, "")
+        .add<string>("run", 0, "run a container", false, "")
+        .add("version", 'v', "version number");
+
+    // add subcommands
+    rootCmd.add(std::move(imageCmd));
+    rootCmd.add(std::move(containerCmd));
+
+    // execute
+    return rootCmd(argc, argv);
 }
