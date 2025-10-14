@@ -22,7 +22,8 @@ int main(int argc, char *argv[])
     });
     imageCmd
         .add("ls", 'l', "list all images")
-        .add_with_default<string>("introspect", 'i', "introspect an image", false, "");
+        .add_with_default<string>("introspect", 'i', "introspect an image", false, "")
+        .set_introduction("image management");
 
     // container command
     cmdline::command containerCmd("container", "container management", [](cmdline::command *cmd) -> int {
@@ -42,7 +43,8 @@ int main(int argc, char *argv[])
     });
     containerCmd
         .add("ls", 'l', "list all containers")
-        .add_with_default<string>("introspect", 'i', "introspect a container", false, "");
+        .add_with_default<string>("introspect", 'i', "introspect a container", false, "")
+        .set_introduction("container management");
 
     // root command
     cmdline::command rootCmd("mydocker", "my docker client", [](cmdline::command *cmd) -> int {
@@ -64,9 +66,10 @@ int main(int argc, char *argv[])
         }
     });
     rootCmd
-        .add_with_default<string>("pull", 0, "pull an image", false, "")
-        .add_with_default<string>("run", 0, "run a container", false, "")
-        .add("version", 'v', "version number");
+        .add_with_default<string>("pull", 0, "pull an image", false, "docker.io/busybox")
+        .add<string>("run", 0, "run a container", false)
+        .add("version", 'v', "version number")
+        .set_introduction("a simple docker client");
 
     // add subcommands
     rootCmd.add(std::move(imageCmd));

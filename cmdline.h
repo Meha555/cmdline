@@ -140,6 +140,11 @@ struct default_reader
     {
         return detail::lexical_cast<T>(str);
     }
+    const std::string &constraint() const
+    {
+        static const std::string msg;
+        return msg;
+    }
 };
 
 template<typename T>
@@ -150,18 +155,24 @@ struct range_reader
         , high_(upper_bound)
     {
     }
-    T operator()(const std::string &s) const
+    T operator()(const std::string &s)
     {
         T ret = default_reader<T>()(s);
-        if (!(ret >= low_ && ret <= high_)) {
-            std::string msg = s + " out of range[" + std::to_string(low_) + ", " + std::to_string(high_) + "]";
-            throw cmdline::cmdline_error(msg);
-        }
+        if (!(ret >= low_ && ret <= high_))
+            throw cmdline::cmdline_error(s + " out of range" + constraint());
         return ret;
+    }
+    const std::string &constraint()
+    {
+        // static const std::string msg = "[" + detail::lexical_cast<std::string>(low_) + ", " + detail::lexical_cast<std::string>(high_) + "]";
+        msg_.clear();
+        msg_ = "[" + detail::lexical_cast<std::string>(low_) + ", " + detail::lexical_cast<std::string>(high_) + "]";
+        return msg_;
     }
 
 private:
     const T low_, high_;
+    std::string msg_;
 };
 
 template<typename T>
@@ -170,26 +181,40 @@ struct oneof_reader
     T operator()(const std::string &s)
     {
         T ret = default_reader<T>()(s);
-        if (std::find(alts_.begin(), alts_.end(), ret) == alts_.end()) {
-            std::string msg = s + " not in [";
-            for (size_t i = 0; i < alts_.size(); ++i) {
-                msg += detail::lexical_cast<T>(alts_[i]);
-                if (i != alts_.size() - 1) {
-                    msg += ", ";
-                }
-            }
-            msg += "]";
-            throw cmdline_error(msg);
-        }
+        if (std::find(alts_.begin(), alts_.end(), ret) == alts_.end())
+            throw cmdline_error(s + " not in " + constraint());
         return ret;
     }
     void add(T &&v)
     {
         alts_.emplace_back(std::forward<T>(v));
     }
+    const std::string &constraint()
+    {
+        // static std::string msg = "{";
+        // for (size_t i = 0; i < alts_.size(); ++i) {
+        //     msg += detail::lexical_cast<T>(alts_[i]);
+        //     if (i != alts_.size() - 1) {
+        //         msg += "|";
+        //     }
+        // }
+        // msg += "}";
+        // return msg;
+        msg_.clear();
+        msg_ = "{";
+        for (size_t i = 0; i < alts_.size(); ++i) {
+            msg_ += detail::lexical_cast<T>(alts_[i]);
+            if (i != alts_.size() - 1) {
+                msg_ += "|";
+            }
+        }
+        msg_ += "}";
+        return msg_;
+    }
 
 private:
     std::vector<T> alts_;
+    std::string msg_;
 };
 
 template<typename Reader, typename T>
@@ -366,6 +391,13 @@ public:
         return detail_;
     }
 
+    description &wrap(const description &other)
+    {
+        brief_ += other.brief_;
+        detail_ += other.detail_;
+        return *this;
+    }
+
     std::string dump(size_t indent) const
     {
         if (detail_.empty()) {
@@ -384,8 +416,8 @@ public:
     }
 
 private:
-    const std::string brief_;
-    const std::string detail_;
+    std::string brief_;
+    std::string detail_;
 };
 
 class parser
@@ -423,17 +455,18 @@ public:
     // add option with value
     template<typename T>
     parser &add(const std::string &full_name, char short_name = 0,
-                const std::string &description = "")
+                const std::string &description = "", bool required = true)
     {
-        return add(full_name, short_name, description, true,
-                   detail::default_reader<T>(), false);
+        return add<T>(full_name, short_name, description, required,
+                   detail::default_reader<T>());
     }
 
     // add option with value
     template<typename T, typename R>
-    parser &add_with_default(const std::string &full_name, char short_name = 0,
-                             const std::string &description = "", bool required = true,
-                             const T default_value = T(), R value_reader = R())
+    typename std::enable_if<std::is_same<decltype(std::declval<R>().operator()(std::declval<const std::string &>())), T>::value, parser &>::type
+    add_with_default(const std::string &full_name, char short_name = 0,
+                     const std::string &description = "", bool required = true,
+                     const T default_value = T(), R value_reader = R())
     {
         if (options_.count(full_name))
             throw cmdline_error("multiple option definition: " + full_name);
@@ -447,8 +480,8 @@ public:
 
     // add option with value
     template<typename T, typename R>
-    // std::enable_if<std::is_same<decltype(std::declval<R>().operator()(std::declval<std::string>())), T>::value, parser &>
-    parser &add(const std::string &full_name, char short_name = 0,
+    typename std::enable_if<std::is_same<decltype(std::declval<R>().operator()(std::declval<const std::string &>())), T>::value, parser &>::type
+    add(const std::string &full_name, char short_name = 0,
         const std::string &description = "", bool required = true,
         R value_reader = R())
     {
@@ -474,10 +507,10 @@ public:
 
     // add option with value
     template<typename T, typename R>
-    // std::enable_if<std::is_same<decltype(std::declval<R>().operator()(std::declval<std::string>())), T>::value, parser &>
-    parser &add_with_default(const std::string &full_name, char short_name = 0,
-                             const class description &desc = description(), bool required = true,
-                             const T default_value = T(), R value_reader = R())
+    typename std::enable_if<std::is_same<decltype(std::declval<R>().operator()(std::declval<const std::string &>())), T>::value, parser &>::type
+    add_with_default(const std::string &full_name, char short_name = 0,
+                     const class description &desc = description(), bool required = true,
+                     const T default_value = T(), R value_reader = R())
     {
         if (options_.count(full_name))
             throw cmdline_error("multiple option definition: " + full_name);
@@ -880,7 +913,7 @@ private:
     protected:
         const std::string nam_;
         const char snam_;
-        const class description desc_;
+        class description desc_;
         // whether value has been set
         bool has_value_;
     };
@@ -931,21 +964,23 @@ private:
         option_with_value(const std::string &full_name, char short_name,
                           const class description &description,
                           bool required, const T &default_value)
-            : option_base(full_name, short_name, full_description(description, required, default_value))
+            : option_base(full_name, short_name, description)
             , required_(required)
             , actual_(default_value)
             , with_default_(true)
             , occurred_(false)
         {
+            this->desc_.wrap(full_description(required, default_value));
         }
 
         option_with_value(const std::string &full_name, char short_name, const class description &description,
                           bool required)
-            : option_base(full_name, short_name, full_description(description, required))
+            : option_base(full_name, short_name, description)
             , required_(required)
             , with_default_(false)
             , occurred_(false)
         {
+            this->desc_.wrap(full_description(required));
         }
 
         ~option_with_value() = default;
@@ -1003,9 +1038,9 @@ private:
         }
 
     protected:
-        class description full_description(const class description &desc, bool need, const T &def = T())
+        class description full_description(bool required, const T &default_value = T()) const
         {
-            return cmdline::description(desc.brief() + " (" + detail::readable_typename<T>() + (need ? "" : (with_default_ ? " [=" + detail::default_value<T>(def) + "]" : "")) + ")", desc.detail());
+            return cmdline::description(" (" + detail::readable_typename<T>() + (required ? "" : (with_default_ ? " [=" + detail::default_value<T>(default_value) + "]" : "")) + ")");
         }
 
         virtual T read(const std::string &s) = 0;
@@ -1024,21 +1059,26 @@ private:
     {
     public:
         option_with_value_with_reader(const std::string &full_name, char short_name, const class description &desc,
-                                      bool required, const T default_value,
-                                      R value_reader)
+                                      bool required, const T default_value, R value_reader)
             : option_with_value<T>(full_name, short_name, desc, required, default_value)
             , reader_(value_reader)
         {
+            this->desc_.wrap(full_description());
         }
         option_with_value_with_reader(const std::string &full_name, char short_name, const class description &desc,
-                                      bool required,
-                                      R value_reader)
+                                      bool required, R value_reader)
             : option_with_value<T>(full_name, short_name, desc, required)
             , reader_(value_reader)
         {
+            this->desc_.wrap(full_description());
         }
 
     private:
+        class description full_description()
+        {
+            return cmdline::description(" " + reader_.constraint());
+        }
+
         T read(const std::string &s)
         {
             return reader_(s);
