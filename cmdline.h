@@ -412,24 +412,50 @@ public:
 
     // add option with value
     template<typename T>
-    parser &add(const std::string &full_name, char short_name = 0,
-                const std::string &description = "", bool is_needed = true,
-                const T definition = T())
+    parser &add_with_default(const std::string &full_name, char short_name = 0,
+                             const std::string &description = "", bool required = true,
+                             const T default_value = T())
     {
-        return add(full_name, short_name, description, is_needed, definition,
-                   detail::default_reader<T>());
+        return add_with_default(full_name, short_name, description, required, default_value,
+                                detail::default_reader<T>());
+    }
+
+    // add option with value
+    template<typename T>
+    parser &add(const std::string &full_name, char short_name = 0,
+                const std::string &description = "")
+    {
+        return add(full_name, short_name, description, true,
+                   detail::default_reader<T>(), false);
     }
 
     // add option with value
     template<typename T, typename R>
-    parser &add(const std::string &full_name, char short_name = 0,
-                const std::string &description = "", bool is_needed = true,
-                const T definition = T(), R value_reader = R())
+    parser &add_with_default(const std::string &full_name, char short_name = 0,
+                             const std::string &description = "", bool required = true,
+                             const T default_value = T(), R value_reader = R())
     {
         if (options_.count(full_name))
             throw cmdline_error("multiple option definition: " + full_name);
         auto p = new option_with_value_with_reader<T, R>(
-            full_name, short_name, is_needed, definition, description,
+            full_name, short_name, description, required, default_value,
+            value_reader);
+        options_.emplace(full_name, p);
+        ordered_.push_back(p);
+        return *this;
+    }
+
+    // add option with value
+    template<typename T, typename R>
+    // std::enable_if<std::is_same<decltype(std::declval<R>().operator()(std::declval<std::string>())), T>::value, parser &>
+    parser &add(const std::string &full_name, char short_name = 0,
+        const std::string &description = "", bool required = true,
+        R value_reader = R())
+    {
+        if (options_.count(full_name))
+            throw cmdline_error("multiple option definition: " + full_name);
+        auto p = new option_with_value_with_reader<T, R>(
+            full_name, short_name, description, required,
             value_reader);
         options_.emplace(full_name, p);
         ordered_.push_back(p);
@@ -438,24 +464,25 @@ public:
 
     // add option with value
     template<typename T>
-    parser &add(const std::string &full_name, char short_name = 0,
-                const class description &desc = description(), bool is_needed = true,
-                const T definition = T())
+    parser &add_with_default(const std::string &full_name, char short_name = 0,
+                             const class description &desc = description(), bool required = true,
+                             const T default_value = T())
     {
-        return add(full_name, short_name, desc, is_needed, definition,
-                   detail::default_reader<T>());
+        return add_with_default(full_name, short_name, desc, required, default_value,
+                                detail::default_reader<T>());
     }
 
     // add option with value
     template<typename T, typename R>
-    parser &add(const std::string &full_name, char short_name = 0,
-                const class description &desc = description(), bool is_needed = true,
-                const T definition = T(), R value_reader = R())
+    // std::enable_if<std::is_same<decltype(std::declval<R>().operator()(std::declval<std::string>())), T>::value, parser &>
+    parser &add_with_default(const std::string &full_name, char short_name = 0,
+                             const class description &desc = description(), bool required = true,
+                             const T default_value = T(), R value_reader = R())
     {
         if (options_.count(full_name))
             throw cmdline_error("multiple option definition: " + full_name);
         auto p = new option_with_value_with_reader<T, R>(
-            full_name, short_name, is_needed, definition, desc,
+            full_name, short_name, desc, required, default_value,
             value_reader);
         options_.emplace(full_name, p);
         ordered_.push_back(p);
@@ -468,7 +495,8 @@ public:
         return *this;
     }
 
-    parser &set_introduction(const std::string &intro) {
+    parser &set_introduction(const std::string &intro)
+    {
         intro_ = intro;
         return *this;
     }
@@ -585,7 +613,7 @@ public:
                 }
             }
         }
-        // parse argv
+        // parse argv, and check options
         for (int i = with_program_name ? 1 : 0; i < argc; i++) {
             // if is long option "--xxx"
             if (std::strncmp(argv[i], "--", 2) == 0) {
@@ -593,7 +621,7 @@ public:
                 if (eq) {
                     std::string name(argv[i] + 2, eq);
                     std::string value(eq + 1);
-                    set_option(name, value);
+                    check_option(name, value);
                 } else {
                     std::string name(argv[i] + 2);
                     auto it = options_.find(name);
@@ -604,7 +632,7 @@ public:
                     // an option with value
                     if (it->second->has_value()) {
                         if (i + 1 < argc) {
-                            set_option(name, argv[++i]);
+                            check_option(name, argv[++i]);
                         } else {
                             errors_.push_back("option needs value: --" + name);
                             continue;
@@ -612,7 +640,7 @@ public:
                     }
                     // just a flag
                     else {
-                        set_option(name);
+                        check_option(name);
                     }
                 }
             }
@@ -626,7 +654,7 @@ public:
                     last_option = argv[i][j];
                     if (!check_short_option(lookup, argv[i][j - 1]))
                         continue;
-                    set_option(lookup[argv[i][j - 1]]);
+                    check_option(lookup[argv[i][j - 1]]);
                 }
 
                 if (!check_short_option(lookup, last_option))
@@ -634,21 +662,25 @@ public:
                 const std::string &full_name = lookup[last_option];
                 // an option with value
                 if (i + 1 < argc && options_[full_name]->has_value()) {
-                    set_option(full_name, argv[i + 1]);
+                    check_option(full_name, argv[i + 1]);
                     i++;
                 }
                 // just a flag
                 else {
-                    set_option(full_name);
+                    check_option(full_name);
                 }
             } else {
                 others_.push_back(argv[i]);
             }
         }
 
-        for (const auto &p : options_)
-            if (!p.second->valid())
-                errors_.push_back("need option: --" + std::string(p.first));
+        // check options requirements
+        for (const auto &p : options_) {
+            auto ret = p.second->valid();
+            if (!ret.second) {
+                errors_.push_back(ret.first + ": --" + std::string(p.first));
+            }
+        }
 
         return errors_.empty();
     }
@@ -769,7 +801,7 @@ private:
         return true;
     }
 
-    void set_option(const std::string &name)
+    void check_option(const std::string &name)
     {
         auto it = options_.find(name);
         if (it == options_.end()) {
@@ -782,7 +814,7 @@ private:
         }
     }
 
-    void set_option(const std::string &name, const std::string &value)
+    void check_option(const std::string &name, const std::string &value)
     {
         auto it = options_.find(name);
         if (it == options_.end()) {
@@ -803,9 +835,10 @@ private:
             : nam_(full_name)
             , snam_(short_name)
             , desc_(desc)
-            , has_(false)
+            , has_value_(false)
         {
         }
+
         virtual ~option_base() = default;
 
         // is flag option
@@ -817,12 +850,12 @@ private:
         // if option value has been set
         bool has_set() const
         {
-            return has_;
+            return has_value_;
         }
         // if value is valid
-        virtual bool valid() const
+        virtual std::pair<std::string, bool> valid() const
         {
-            return true;
+            return {"", true};
         }
         // if option must needed
         virtual bool must() const = 0;
@@ -849,7 +882,7 @@ private:
         const char snam_;
         const class description desc_;
         // whether value has been set
-        bool has_;
+        bool has_value_;
     };
 
     // flags are options without value
@@ -861,6 +894,7 @@ private:
             : option_base(full_name, short_name, desc)
         {
         }
+
         ~option_without_value() = default;
 
         bool has_value() const override
@@ -870,7 +904,7 @@ private:
 
         bool set() override
         {
-            has_ = true;
+            has_value_ = true;
             return true;
         }
 
@@ -895,17 +929,31 @@ private:
     {
     public:
         option_with_value(const std::string &full_name, char short_name,
-                          bool is_needed, const T &definition,
-                          const class description &description)
-            : option_base(full_name, short_name, full_description(description, is_needed, definition))
-            , need_(is_needed)
-            , actual_(definition)
+                          const class description &description,
+                          bool required, const T &default_value)
+            : option_base(full_name, short_name, full_description(description, required, default_value))
+            , required_(required)
+            , actual_(default_value)
+            , with_default_(true)
+            , occurred_(false)
         {
         }
+
+        option_with_value(const std::string &full_name, char short_name, const class description &description,
+                          bool required)
+            : option_base(full_name, short_name, full_description(description, required))
+            , required_(required)
+            , with_default_(false)
+            , occurred_(false)
+        {
+        }
+
         ~option_with_value() = default;
 
         const T &get() const
         {
+            if (!with_default_ && !has_value_)
+                throw cmdline_error("option without value: --" + nam_);
             return actual_;
         }
 
@@ -923,7 +971,8 @@ private:
         {
             try {
                 actual_ = read(value);
-                has_ = true;
+                has_value_ = true;
+                occurred_ = true;
             } catch (const std::exception &ex) {
                 std::cerr << ex.what() << std::endl;
                 return false;
@@ -931,16 +980,21 @@ private:
             return true;
         }
 
-        bool valid() const override
+        std::pair<std::string, bool> valid() const override
         {
-            if (need_ && !has_)
-                return false;
-            return true;
+            // if required and not set, invalid
+            if (required_ && !has_value_) {
+                return {"need option", false};
+            }
+            // if occurred and no value can be used, invalid
+            if (occurred_ && !with_default_ && !has_value_)
+                return {"option needs value", false};
+            return {"", true};
         }
 
         bool must() const override
         {
-            return need_;
+            return required_;
         }
 
         std::string short_description() const override
@@ -949,27 +1003,37 @@ private:
         }
 
     protected:
-        class description full_description(const class description &desc, bool need, const T &def)
+        class description full_description(const class description &desc, bool need, const T &def = T())
         {
-            return cmdline::description(desc.brief() + " (" + detail::readable_typename<T>() + (need ? "" : " [=" + detail::default_value<T>(def) + "]") + ")", desc.detail());
+            return cmdline::description(desc.brief() + " (" + detail::readable_typename<T>() + (need ? "" : (with_default_ ? " [=" + detail::default_value<T>(def) + "]" : "")) + ")", desc.detail());
         }
 
         virtual T read(const std::string &s) = 0;
-
-        const bool need_;
+        // whether this option is required
+        const bool required_;
+        // the actual value passed from command line
         T actual_;
+        // whether this option has default value
+        bool with_default_;
+        // whether this option has occurred
+        bool occurred_;
     };
 
     template<typename T, typename R>
     class option_with_value_with_reader : public option_with_value<T>
     {
     public:
-        option_with_value_with_reader(const std::string &full_name, char short_name,
-                                      bool is_needed, const T definition,
-                                      const class description &desc,
+        option_with_value_with_reader(const std::string &full_name, char short_name, const class description &desc,
+                                      bool required, const T default_value,
                                       R value_reader)
-            : option_with_value<T>(full_name, short_name, is_needed, definition,
-                                   desc)
+            : option_with_value<T>(full_name, short_name, desc, required, default_value)
+            , reader_(value_reader)
+        {
+        }
+        option_with_value_with_reader(const std::string &full_name, char short_name, const class description &desc,
+                                      bool required,
+                                      R value_reader)
+            : option_with_value<T>(full_name, short_name, desc, required)
             , reader_(value_reader)
         {
         }

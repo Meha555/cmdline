@@ -22,7 +22,7 @@ int main(int argc, char *argv[])
     });
     imageCmd
         .add("ls", 'l', "list all images")
-        .add<string>("introspect", 'i', "introspect an image", false, "");
+        .add_with_default<string>("introspect", 'i', "introspect an image", false, "");
 
     // container command
     cmdline::command containerCmd("container", "container management", [](cmdline::command *cmd) -> int {
@@ -42,7 +42,7 @@ int main(int argc, char *argv[])
     });
     containerCmd
         .add("ls", 'l', "list all containers")
-        .add<string>("introspect", 'i', "introspect a container", false, "");
+        .add_with_default<string>("introspect", 'i', "introspect a container", false, "");
 
     // root command
     cmdline::command rootCmd("mydocker", "my docker client", [](cmdline::command *cmd) -> int {
@@ -64,8 +64,8 @@ int main(int argc, char *argv[])
         }
     });
     rootCmd
-        .add<string>("pull", 0, "pull an image", false, "")
-        .add<string>("run", 0, "run a container", false, "")
+        .add_with_default<string>("pull", 0, "pull an image", false, "")
+        .add_with_default<string>("run", 0, "run a container", false, "")
         .add("version", 'v', "version number");
 
     // add subcommands
