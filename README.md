@@ -257,6 +257,13 @@ options:
   -?, --help       print this message
 ```
 
+Note: Except rootCmd, other sub-commands should not have sub-sub-commands!
+
+```cpp
+rootCmd.add(std::move(subCmd));
+subCmd.add(std::move(subSubCmd)); // NOT ALLOWED!!!
+```
+
 ### Extra Options
 
 #### rest of arguments
@@ -285,6 +292,30 @@ Result is:
 ```bash
 $ ./test
 usage: ./test --host=string [options] ... filename ...
+options:
+  -h, --host    host name (string)
+  -p, --port    port number (int [=80])
+  -t, --type    protocol type (string [=http])
+      --gzip    gzip when transfer
+  -?, --help    print this message
+```
+
+#### introduction
+
+`set_introduction()` method is add an introduction text of usage.
+
+```cpp
+...
+a.set_introduction("this is introduction");
+...
+```
+
+Result is:
+
+```bash
+$ ./test
+usage: ./test --host=string [options] ... 
+this is introduction
 options:
   -h, --host    host name (string)
   -p, --port    port number (int [=80])
