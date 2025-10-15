@@ -1,4 +1,4 @@
-# cmdline: A simple command line parser for C++
+# cmdline: A simple command line parser for C++11 and above
 
 > Extented from [cmdline](https://github.com/tanakh/cmdline)
 
@@ -6,6 +6,7 @@
 
 This is a simple command line parser for C++.
 
+- Support C++11 and above
 - Easy to use
 - Only one header file
 - Automatic type check

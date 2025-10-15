@@ -552,11 +552,13 @@ public:
     const T &get(const std::string &name) const
     {
         if (options_.count(name) == 0)
-            throw cmdline_error("there is no flag: --" + name);
+            throw cmdline_error("there is no option: --" + name);
         const option_with_value<T> *p =
             dynamic_cast<const option_with_value<T> *>(options_.find(name)->second.get());
         if (p == nullptr)
-            throw cmdline_error("type mismatch flag '" + name + "'");
+            throw cmdline_error("type mismatch option '" + name + "'");
+        if (!p->occurred())
+            throw cmdline_error("option '" + name + "' is not set");
         return p->get();
     }
 
@@ -874,7 +876,7 @@ private:
 
         virtual ~option_base() = default;
 
-        // is flag option
+        // is option with value
         virtual bool has_value() const = 0;
         // set option without value
         virtual bool set() = 0;
@@ -987,7 +989,7 @@ private:
 
         const T &get() const
         {
-            if (!with_default_ && !has_value_)
+            if (occurred_ && !with_default_ && !has_value_)
                 throw cmdline_error("option without value: --" + nam_);
             return actual_;
         }
@@ -1035,6 +1037,11 @@ private:
         std::string short_description() const override
         {
             return "--" + nam_ + "=" + detail::readable_typename<T>();
+        }
+
+        bool occurred() const
+        {
+            return occurred_;
         }
 
     protected:
