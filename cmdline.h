@@ -542,6 +542,10 @@ public:
         return *this;
     }
 
+    // whether this option has occur in cmdline.
+    // note that is option has default value, this
+    // function will still return false if it
+    // didn't occur in cmdline.
     bool exist(const std::string &name) const
     {
         auto it = options_.find(name);
@@ -559,7 +563,7 @@ public:
             dynamic_cast<const option_with_value<T> *>(options_.find(name)->second.get());
         if (p == nullptr)
             throw cmdline_error("type mismatch option '" + name + "'");
-        if (!p->occurred())
+        if (!p->occurred() && !p->with_default())
             throw cmdline_error("option '" + name + "' is not set");
         return p->get();
     }
@@ -1041,6 +1045,11 @@ private:
             return occurred_;
         }
 
+        bool with_default() const
+        {
+            return with_default_;
+        }
+
     protected:
         class description full_description(bool required, const T &default_value = T()) const
         {
@@ -1053,7 +1062,7 @@ private:
         // the actual value passed from command line
         T actual_;
         // whether this option has default value
-        bool with_default_;
+        const bool with_default_;
         // whether this option has occurred
         bool occurred_;
     };
