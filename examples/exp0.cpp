@@ -6,13 +6,18 @@ int main(int argc, char *argv[])
 {
     cmdline::parser a;
     a.add_with_default<string>("host", 'h', "host name", false);
-    a.add("gzip", '\0', "gzip when transfer");
+    a.add("gzip", 'g', "gzip when transfer");
 
     a.parse_check(argc, argv);
 
-    cout << a.get<string>("host") << endl;
+    try {
+        cout << a.get<string>("host") << endl;
 
-    if (a.exist("gzip"))
-        cout << "gzip" << endl;
+        if (a.exist("gzip"))
+            cout << "gzip" << endl;
+    } catch (const std::exception &ex) {
+        cout << ex.what() << endl;
+        return 1;
+    }
     return 0;
 }
