@@ -5,16 +5,16 @@ using namespace std;
 int main(int argc, char *argv[])
 {
     cmdline::parser a;
-    a.add_with_default<string>("host", 'h', cmdline::description("host name", R"(example:
+    a.option_with_default<string>("host", 'h', cmdline::description("host name", R"(example:
   --host=localhost
   -h 127.0.0.1)"),
                   true, "")
-        .add_with_default<int>("port", 'p', "port number", false, 80, cmdline::range(1, 65535))
-        .add_with_default<string>("type", 't', "protocol type", false, "http",
+        .option_with_default<int>("port", 'p', "port number", false, 80, cmdline::range(1, 65535))
+        .option_with_default<string>("type", 't', "protocol type", false, "http",
                      cmdline::oneof<string>("http", "https", "ssh", "ftp"))
-        .add("help", 0, "print this message")
-        .set_footer("filename ...")
-        .set_program_name("exp2");
+        .flag("help", 0, "print this message")
+        .footer("filename ...")
+        .program_name("exp2");
 
     // only parse
     bool ok = a.parse(argc, argv);

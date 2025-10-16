@@ -176,8 +176,8 @@ int main(int argc, char *argv[])
         .add<string>("host", 'h', cmdline::description("host name", "example:\n  --host=localhost\n  -h 127.0.0.1"), true, "")
         .add<int>("port", 'p', "port number", false, 80, cmdline::range(1, 65535))
         .add("gzip", '\0', "gzip when transfer")
-        .set_footer("this is footer for sub-command")
-        .set_introduction("this is introduction for sub-command");
+        .footer("this is footer for sub-command")
+        .introduction("this is introduction for sub-command");
 
     // root command
     cmdline::command rootCmd("test", "test cobra-like options", [](cmdline::command *cmd) -> int {
@@ -196,8 +196,8 @@ int main(int argc, char *argv[])
     rootCmd
         .add<string>("type", 't', "protocol type", false, "http", cmdline::oneof<string>("http", "https", "ssh", "ftp"))
         .add("version", 'v', "version number")
-        .set_footer("this is footer for root command")
-        .set_introduction("this is introduction for root command");
+        .footer("this is footer for root command")
+        .introduction("this is introduction for root command");
 
     // add subcommands
     rootCmd.add(std::move(subCmd));
@@ -280,11 +280,11 @@ for (int i = 0; i < a.rest().size(); i++)
 
 #### footer
 
-`set_footer()` method is add a footer text of usage.
+`footer()` method is add a footer text of usage.
 
 ```cpp
 ...
-a.set_footer("filename ...");
+a.footer("filename ...");
 ...
 ```
 
@@ -303,11 +303,11 @@ options:
 
 #### introduction
 
-`set_introduction()` method is add an introduction text of usage.
+`introduction()` method is add an introduction text of usage.
 
 ```cpp
 ...
-a.set_introduction("this is introduction");
+a.introduction("this is introduction");
 ...
 ```
 
@@ -329,7 +329,7 @@ options:
 
 A parser shows program name to usage message.
 
-Default program name is determined by `argv[0]`. `set_program_name()` method can set any string to program name.
+Default program name is determined by `argv[0]`. `program_name()` method can set any string to program name.
 
 ### Process flags manually
 

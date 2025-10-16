@@ -431,7 +431,7 @@ public:
     ~parser() = default;
 
     // add flag
-    parser &add(const std::string &long_name, char short_name = 0,
+    parser &flag(const std::string &long_name, char short_name = 0,
                 const std::string &description = "")
     {
         if (long_name.empty())
@@ -446,27 +446,27 @@ public:
 
     // add option with value
     template<typename T>
-    parser &add_with_default(const std::string &long_name, char short_name = 0,
+    parser &option_with_default(const std::string &long_name, char short_name = 0,
                              const std::string &description = "", bool required = true,
                              const T default_value = T())
     {
-        return add_with_default(long_name, short_name, description, required, default_value,
+        return option_with_default(long_name, short_name, description, required, default_value,
                                 detail::default_reader<T>());
     }
 
     // add option with value
     template<typename T>
-    parser &add(const std::string &long_name, char short_name = 0,
+    parser &option(const std::string &long_name, char short_name = 0,
                 const std::string &description = "", bool required = true)
     {
-        return add<T>(long_name, short_name, description, required,
+        return option<T>(long_name, short_name, description, required,
                    detail::default_reader<T>());
     }
 
     // add option with value
     template<typename T, typename R>
     typename std::enable_if<std::is_same<decltype(std::declval<R>().operator()(std::declval<const std::string &>())), T>::value, parser &>::type
-    add_with_default(const std::string &long_name, char short_name = 0,
+    option_with_default(const std::string &long_name, char short_name = 0,
                      const std::string &description = "", bool required = true,
                      const T default_value = T(), R value_reader = R())
     {
@@ -483,7 +483,7 @@ public:
     // add option with value
     template<typename T, typename R>
     typename std::enable_if<std::is_same<decltype(std::declval<R>().operator()(std::declval<const std::string &>())), T>::value, parser &>::type
-    add(const std::string &long_name, char short_name = 0,
+    option(const std::string &long_name, char short_name = 0,
         const std::string &description = "", bool required = true,
         R value_reader = R())
     {
@@ -499,18 +499,18 @@ public:
 
     // add option with value
     template<typename T>
-    parser &add_with_default(const std::string &long_name, char short_name = 0,
+    parser &option_with_default(const std::string &long_name, char short_name = 0,
                              const class description &desc = description(), bool required = true,
                              const T default_value = T())
     {
-        return add_with_default(long_name, short_name, desc, required, default_value,
+        return option_with_default(long_name, short_name, desc, required, default_value,
                                 detail::default_reader<T>());
     }
 
     // add option with value
     template<typename T, typename R>
     typename std::enable_if<std::is_same<decltype(std::declval<R>().operator()(std::declval<const std::string &>())), T>::value, parser &>::type
-    add_with_default(const std::string &long_name, char short_name = 0,
+    option_with_default(const std::string &long_name, char short_name = 0,
                      const class description &desc = description(), bool required = true,
                      const T default_value = T(), R value_reader = R())
     {
@@ -524,19 +524,19 @@ public:
         return *this;
     }
 
-    parser &set_footer(const std::string &f)
+    parser &footer(const std::string &f)
     {
         ftr_ = f;
         return *this;
     }
 
-    parser &set_introduction(const std::string &intro)
+    parser &introduction(const std::string &intro)
     {
         intro_ = intro;
         return *this;
     }
 
-    parser &set_program_name(const std::string &name)
+    parser &program_name(const std::string &name)
     {
         prog_name_ = name;
         return *this;
@@ -611,7 +611,7 @@ public:
             args.push_back(buf);
 
         for (size_t i = 0; i < args.size(); i++)
-            std::cout << "\"" << args[i] << "\"" << std::endl;
+            std::cerr << "\"" << args[i] << "\"" << std::endl;
 
         return parse(args, with_program_name);
     }
@@ -729,14 +729,18 @@ public:
     void parse_check(const std::string &arg, bool with_program_name = true)
     {
         if (!options_.count("help"))
-            add("help", '?', "print this message");
+            flag("help", '?', "print this message");
+        if (!options_.count("version"))
+            flag("version", 'V', "show version");
         check(with_program_name ? 0 : 1, parse(arg, with_program_name));
     }
 
     void parse_check(const std::vector<std::string> &args, bool with_program_name = true)
     {
         if (!options_.count("help"))
-            add("help", '?', "print this message");
+            flag("help", '?', "print this message");
+        if (!options_.count("version"))
+            flag("version", 'V', "show version");
         int argc = static_cast<int>(args.size());
         check(with_program_name ? argc : argc + 1, parse(args, with_program_name));
     }
@@ -744,7 +748,9 @@ public:
     void parse_check(int argc, char *argv[], bool with_program_name = true)
     {
         if (!options_.count("help"))
-            add("help", '?', "print this message");
+            flag("help", '?', "print this message");
+        if (!options_.count("version"))
+            flag("version", 'V', "show version");
         check(with_program_name ? argc : argc + 1, parse(argc, argv, with_program_name));
     }
 
@@ -769,6 +775,11 @@ public:
             oss << intro_ << "\n\n";
         usage(oss);
         return oss.str();
+    }
+
+    void version(const char *version)
+    {
+        version_.assign(version);
     }
 
 protected:
@@ -811,11 +822,17 @@ protected:
 private:
     void check(int argc, bool ok) const
     {
+        // 打印版本信息时，不打印错误信息
+        if (!version_.empty() && exist("version")) {
+            std::cerr << version_ << '\n';
+            std::exit(0);
+        }
+        // 直接输入 program_name 的情况：打印帮助信息
         if ((argc == 1 && !ok) || exist("help")) {
             std::cerr << help();
             std::exit(!ok);
         }
-
+        // 输入 program_name xxx 的情况：输出错误信息和帮助信息
         if (!ok) {
             std::cerr << error() << '\n'
                       << help();
@@ -1117,13 +1134,13 @@ private:
     std::vector<std::string> others_;
     // errors during parsing
     std::vector<std::string> errors_;
+    // version
+    std::string version_;
 };
 
 class command : public parser
 {
 public:
-    // enable parser::add
-    using parser::add;
     // Here, passing a pointer also has an advantage that allows the callback function to use polymorphism.
     using callback_t = std::function<int(command *cmd)>;
 
@@ -1132,7 +1149,7 @@ public:
         , desc_(desc)
         , callback_(callback)
     {
-        set_program_name(name);
+        program_name(name);
     }
     command(const command &other) = delete;
     command &operator=(const command &other) = delete;
@@ -1221,7 +1238,7 @@ private:
     // for sub commands
     int operator()(const std::string &cmd_name, int argc, char *argv[])
     {
-        set_program_name(cmd_name);
+        program_name(cmd_name);
         parse_check(argc, argv, false);
         return run();
     }
