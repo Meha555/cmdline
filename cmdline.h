@@ -870,7 +870,7 @@ private:
         // 直接输入 program_name 的情况：打印帮助信息
         if ((argc == 1 && !ok) || exist("help")) {
             std::cerr << help();
-            std::exit(!ok);
+            std::exit(0);
         }
         // 输入 program_name xxx 的情况：输出错误信息和帮助信息
         if (!ok) {
