@@ -444,6 +444,20 @@ public:
         return *this;
     }
 
+    // add flag
+    parser &flag(const std::string &long_name, char short_name = 0,
+                const class description &desc = description())
+    {
+        if (long_name.empty())
+            throw cmdline_error("flag only accetps long name");
+        if (options_.count(long_name))
+            throw cmdline_error("multiple flag definition: " + long_name);
+        auto p = new option_without_value(long_name, short_name, desc);
+        options_.emplace(long_name, p);
+        ordered_.push_back(p);
+        return *this;
+    }
+
     // add option with value
     template<typename T>
     parser &option_with_default(const std::string &long_name, char short_name = 0,
@@ -460,6 +474,15 @@ public:
                 const std::string &description = "", bool required = true)
     {
         return option<T>(long_name, short_name, description, required,
+                   detail::default_reader<T>());
+    }
+
+    // add option with value
+    template<typename T>
+    parser &option(const std::string &long_name, char short_name = 0,
+                const class description &desc = description(), bool required = true)
+    {
+        return option<T>(long_name, short_name, desc, required,
                    detail::default_reader<T>());
     }
 
@@ -491,6 +514,23 @@ public:
             throw cmdline_error("multiple option definition: " + long_name);
         auto p = new option_with_value_with_reader<T, R>(
             long_name, short_name, description, required,
+            value_reader);
+        options_.emplace(long_name, p);
+        ordered_.push_back(p);
+        return *this;
+    }
+
+    // add option with value
+    template<typename T, typename R>
+    typename std::enable_if<std::is_same<decltype(std::declval<R>().operator()(std::declval<const std::string &>())), T>::value, parser &>::type
+    option(const std::string &long_name, char short_name = 0,
+        const class description &desc = description(), bool required = true,
+        R value_reader = R())
+    {
+        if (options_.count(long_name))
+            throw cmdline_error("multiple option definition: " + long_name);
+        auto p = new option_with_value_with_reader<T, R>(
+            long_name, short_name, desc, required,
             value_reader);
         options_.emplace(long_name, p);
         ordered_.push_back(p);
