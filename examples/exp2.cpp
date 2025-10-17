@@ -8,10 +8,10 @@ int main(int argc, char *argv[])
     a.option_with_default<string>("host", 'h', cmdline::description("host name", R"(example:
   --host=localhost
   -h 127.0.0.1)"),
-                  true, "")
+                                  true, "")
         .option_with_default<int>("port", 'p', "port number", false, 80, cmdline::range(1, 65535))
         .option_with_default<string>("type", 't', "protocol type", false, "http",
-                     cmdline::oneof<string>("http", "https", "ssh", "ftp"))
+                                     cmdline::oneof<string>("http", "https", "ssh", "ftp"))
         .flag("help", 0, "print this message")
         .footer("filename ...")
         .program_name("exp2");
@@ -19,19 +19,30 @@ int main(int argc, char *argv[])
     // only parse
     bool ok = a.parse(argc, argv);
 
-    // check manually
-    if (argc == 1 || a.exist("help")) {
-        cerr << a.help();
-        return 0;
-    }
+    try {
+        // check manually
+        if (argc == 1 || a.exist("help")) {
+            cerr << a.help();
+            return 0;
+        }
 
-    if (!ok) {
-        cerr << a.error() << endl
-             << a.help();
-        return 0;
+        if (!ok) {
+            cerr << a.error() << endl
+                 << a.help();
+            return 1;
+        }
+#if CMDLINE_USE_EXCEPTIONS
+        cout << a.get<string>("host") << ":" << a.get<int>("port") << endl;
+#else
+        auto host = a.get<string>("host");
+        auto port = a.get<int>("port");
+        if (host.second && port.second)
+            cout << host.first << ":" << port.first << endl;
+#endif
+    } catch (const std::exception &ex) {
+        cerr << ex.what() << endl;
+        return 1;
     }
-
-    cout << a.get<string>("host") << ":" << a.get<int>("port") << endl;
 
     for (size_t i = 0; i < a.rest().size(); i++)
         cout << "- " << a.rest()[i] << endl;

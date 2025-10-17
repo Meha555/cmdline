@@ -1,5 +1,4 @@
 #include "cmdline.h"
-#include <ios>
 
 using namespace std;
 
@@ -13,9 +12,10 @@ int main(int argc, char *argv[])
 
     a.parse_check(argc, argv);
 
+    cout.setf(ios::boolalpha);
+#if CMDLINE_USE_EXCEPTIONS
     try {
-        cout << boolalpha
-             << "host: " << a.exist("host") << endl
+        cout << "host: " << a.exist("host") << endl
              << "port: " << a.exist("port") << endl
              << "gzip: " << a.exist("gzip") << endl
              << "version: " << a.exist("version") << endl;
@@ -26,5 +26,20 @@ int main(int argc, char *argv[])
         cout << ex.what() << endl;
         return 1;
     }
+#else
+    cout << "host: " << a.exist("host") << endl
+         << "port: " << a.exist("port") << endl
+         << "gzip: " << a.exist("gzip") << endl
+         << "version: " << a.exist("version") << endl;
+
+    auto host = a.get<string>("host");
+    if (host.second) {
+        cout << "host: " << host.first << endl;
+    }
+    auto port = a.get<int>("port");
+    if (port.second) {
+        cout << "port: " << port.first << endl;
+    }
+#endif
     return 0;
 }

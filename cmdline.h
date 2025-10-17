@@ -11,6 +11,9 @@
 #include <string>
 #include <typeinfo>
 #include <vector>
+#if CMDLINE_USE_EXCEPTIONS && __cplusplus >= 201703L
+#include <optional>
+#endif
 
 #if !defined(_MSC_VER) && (defined(__clang__) || defined(__GNUC__))
 #include <cxxabi.h>
@@ -266,7 +269,8 @@ struct regex_reader
         , pattern_(pattern)
     {
     }
-    T operator()(const std::string &s) {
+    T operator()(const std::string &s)
+    {
         std::match_results<typename T::const_iterator> match;
         if (!std::regex_search(s, match, re_)) {
             throw cmdline_error(s + " doesn't match " + constraint());
@@ -279,8 +283,8 @@ struct regex_reader
     }
 
 private:
-    std::regex re_;
-    std::string pattern_;
+    const std::regex re_;
+    const std::string pattern_;
 };
 
 } // namespace detail
@@ -478,6 +482,14 @@ private:
     std::string detail_;
 };
 
+#if __cplusplus >= 201703L
+inline
+#endif
+    static struct config
+{
+    bool show_option_typename = true;
+} g_config;
+
 class parser
 {
 public:
@@ -488,9 +500,10 @@ public:
     parser &operator=(parser &&other) noexcept = default;
     ~parser() = default;
 
+#if CMDLINE_USE_EXCEPTIONS
     // add flag
     parser &flag(const std::string &long_name, char short_name = 0,
-                const std::string &description = "")
+                 const std::string &description = "")
     {
         if (long_name.empty())
             throw cmdline_error("flag only accetps long name");
@@ -504,7 +517,7 @@ public:
 
     // add flag
     parser &flag(const std::string &long_name, char short_name = 0,
-                const class description &desc = description())
+                 const class description &desc = description())
     {
         if (long_name.empty())
             throw cmdline_error("flag only accetps long name");
@@ -515,41 +528,119 @@ public:
         ordered_.push_back(p);
         return *this;
     }
+#else
+    // add flag
+    parser &flag(const std::string &long_name, char short_name = 0,
+                 const std::string &description = "")
+    {
+        if (long_name.empty()) {
+            std::cerr << "flag only accetps long name\n";
+            std::exit(1);
+        }
+        if (options_.count(long_name)) {
+            std::cerr << "multiple flag definition: " << long_name << '\n';
+            std::exit(1);
+        }
+        auto p = new option_without_value(long_name, short_name, description);
+        options_.emplace(long_name, p);
+        ordered_.push_back(p);
+        return *this;
+    }
+
+    // add flag
+    parser &flag(const std::string &long_name, char short_name = 0,
+                 const class description &desc = description())
+    {
+        if (long_name.empty()) {
+            std::cerr << "flag only accetps long name\n";
+            std::exit(1);
+        }
+        if (options_.count(long_name)) {
+            std::cerr << "multiple flag definition: " << long_name << '\n';
+            std::exit(1);
+        }
+        auto p = new option_without_value(long_name, short_name, desc);
+        options_.emplace(long_name, p);
+        ordered_.push_back(p);
+        return *this;
+    }
+#endif
 
     // add option with value
     template<typename T>
     parser &option_with_default(const std::string &long_name, char short_name = 0,
-                             const std::string &description = "", bool required = true,
-                             const T default_value = T())
+                                const std::string &description = "", bool required = true,
+                                const T default_value = T())
     {
         return option_with_default(long_name, short_name, description, required, default_value,
-                                detail::default_reader<T>());
+                                   detail::default_reader<T>());
     }
 
+#if CMDLINE_USE_EXCEPTIONS
     // add option with value
     template<typename T>
     parser &option(const std::string &long_name, char short_name = 0,
-                const std::string &description = "", bool required = true)
+                   const std::string &description = "", bool required = true)
     {
         return option<T>(long_name, short_name, description, required,
-                   detail::default_reader<T>());
+                         detail::default_reader<T>());
     }
 
     // add option with value
     template<typename T>
     parser &option(const std::string &long_name, char short_name = 0,
-                const class description &desc = description(), bool required = true)
+                   const class description &desc = description(), bool required = true)
     {
         return option<T>(long_name, short_name, desc, required,
-                   detail::default_reader<T>());
+                         detail::default_reader<T>());
+    }
+#else
+    // add option with value
+    template<typename T>
+    parser &option(const std::string &long_name, char short_name = 0,
+                   const std::string &description = "", bool required = true)
+    {
+        if (long_name.empty()) {
+            std::cerr << "option only accepts long name\n";
+            std::exit(1);
+        }
+        if (options_.count(long_name)) {
+            std::cerr << "multiple flag/option definition: " << long_name << '\n';
+            std::exit(1);
+        }
+        auto p = new option_with_value_with_reader<T, detail::default_reader<T>>(long_name, short_name, description, required, detail::default_reader<T>{});
+        options_.emplace(long_name, std::unique_ptr<option_base>(p));
+        ordered_.push_back(p);
+        return *this;
     }
 
+    // add option with value
+    template<typename T>
+    parser &option(const std::string &long_name, char short_name = 0,
+                   const class description &desc = description(), bool required = true)
+    {
+        if (long_name.empty()) {
+            std::cerr << "option only accepts long name\n";
+            std::exit(1);
+        }
+        if (options_.count(long_name)) {
+            std::cerr << "multiple flag/option definition: " << long_name << '\n';
+            std::exit(1);
+        }
+        auto p = new option_with_value_with_reader<T, detail::default_reader<T>>(long_name, short_name, desc, required, detail::default_reader<T>{});
+        options_.emplace(long_name, std::unique_ptr<option_base>(p));
+        ordered_.push_back(p);
+        return *this;
+    }
+#endif
+
+#if CMDLINE_USE_EXCEPTIONS
     // add option with value
     template<typename T, typename R>
     typename std::enable_if<std::is_same<decltype(std::declval<R>().operator()(std::declval<const std::string &>())), T>::value, parser &>::type
     option_with_default(const std::string &long_name, char short_name = 0,
-                     const std::string &description = "", bool required = true,
-                     const T default_value = T(), R value_reader = R())
+                        const std::string &description = "", bool required = true,
+                        const T default_value = T(), R value_reader = R())
     {
         if (options_.count(long_name))
             throw cmdline_error("multiple option definition: " + long_name);
@@ -565,8 +656,8 @@ public:
     template<typename T, typename R>
     typename std::enable_if<std::is_same<decltype(std::declval<R>().operator()(std::declval<const std::string &>())), T>::value, parser &>::type
     option(const std::string &long_name, char short_name = 0,
-        const std::string &description = "", bool required = true,
-        R value_reader = R())
+           const std::string &description = "", bool required = true,
+           R value_reader = R())
     {
         if (options_.count(long_name))
             throw cmdline_error("multiple option definition: " + long_name);
@@ -582,8 +673,8 @@ public:
     template<typename T, typename R>
     typename std::enable_if<std::is_same<decltype(std::declval<R>().operator()(std::declval<const std::string &>())), T>::value, parser &>::type
     option(const std::string &long_name, char short_name = 0,
-        const class description &desc = description(), bool required = true,
-        R value_reader = R())
+           const class description &desc = description(), bool required = true,
+           R value_reader = R())
     {
         if (options_.count(long_name))
             throw cmdline_error("multiple option definition: " + long_name);
@@ -598,19 +689,19 @@ public:
     // add option with value
     template<typename T>
     parser &option_with_default(const std::string &long_name, char short_name = 0,
-                             const class description &desc = description(), bool required = true,
-                             const T default_value = T())
+                                const class description &desc = description(), bool required = true,
+                                const T default_value = T())
     {
         return option_with_default(long_name, short_name, desc, required, default_value,
-                                detail::default_reader<T>());
+                                   detail::default_reader<T>());
     }
 
     // add option with value
     template<typename T, typename R>
     typename std::enable_if<std::is_same<decltype(std::declval<R>().operator()(std::declval<const std::string &>())), T>::value, parser &>::type
     option_with_default(const std::string &long_name, char short_name = 0,
-                     const class description &desc = description(), bool required = true,
-                     const T default_value = T(), R value_reader = R())
+                        const class description &desc = description(), bool required = true,
+                        const T default_value = T(), R value_reader = R())
     {
         if (options_.count(long_name))
             throw cmdline_error("multiple option definition: " + long_name);
@@ -621,6 +712,93 @@ public:
         ordered_.push_back(p);
         return *this;
     }
+#else
+    // add option with value
+    template<typename T, typename R>
+    typename std::enable_if<std::is_same<decltype(std::declval<R>().operator()(std::declval<const std::string &>())), T>::value, parser &>::type
+    option_with_default(const std::string &long_name, char short_name = 0,
+                        const std::string &description = "", bool required = true,
+                        const T default_value = T(), R value_reader = R())
+    {
+        if (options_.count(long_name)) {
+            std::cerr << "multiple option definition: " << long_name << '\n';
+            std::exit(1);
+        }
+        auto p = new option_with_value_with_reader<T, R>(
+            long_name, short_name, description, required, default_value,
+            value_reader);
+        options_.emplace(long_name, p);
+        ordered_.push_back(p);
+        return *this;
+    }
+
+    // add option with value
+    template<typename T, typename R>
+    typename std::enable_if<std::is_same<decltype(std::declval<R>().operator()(std::declval<const std::string &>())), T>::value, parser &>::type
+    option(const std::string &long_name, char short_name = 0,
+           const std::string &description = "", bool required = true,
+           R value_reader = R())
+    {
+        if (options_.count(long_name)) {
+            std::cerr << "multiple option definition: " << long_name << '\n';
+            std::exit(1);
+        }
+        auto p = new option_with_value_with_reader<T, R>(
+            long_name, short_name, description, required,
+            value_reader);
+        options_.emplace(long_name, p);
+        ordered_.push_back(p);
+        return *this;
+    }
+
+    // add option with value
+    template<typename T, typename R>
+    typename std::enable_if<std::is_same<decltype(std::declval<R>().operator()(std::declval<const std::string &>())), T>::value, parser &>::type
+    option(const std::string &long_name, char short_name = 0,
+           const class description &desc = description(), bool required = true,
+           R value_reader = R())
+    {
+        if (options_.count(long_name)) {
+            std::cerr << "multiple option definition: " << long_name << '\n';
+            std::exit(1);
+        }
+        auto p = new option_with_value_with_reader<T, R>(
+            long_name, short_name, desc, required,
+            value_reader);
+        options_.emplace(long_name, p);
+        ordered_.push_back(p);
+        return *this;
+    }
+
+    // add option with value
+    template<typename T>
+    parser &option_with_default(const std::string &long_name, char short_name = 0,
+                                const class description &desc = description(), bool required = true,
+                                const T default_value = T())
+    {
+        return option_with_default(long_name, short_name, desc, required, default_value,
+                                   detail::default_reader<T>());
+    }
+
+    // add option with value
+    template<typename T, typename R>
+    typename std::enable_if<std::is_same<decltype(std::declval<R>().operator()(std::declval<const std::string &>())), T>::value, parser &>::type
+    option_with_default(const std::string &long_name, char short_name = 0,
+                        const class description &desc = description(), bool required = true,
+                        const T default_value = T(), R value_reader = R())
+    {
+        if (options_.count(long_name)) {
+            std::cerr << "multiple option definition: " << long_name << '\n';
+            std::exit(1);
+        }
+        auto p = new option_with_value_with_reader<T, R>(
+            long_name, short_name, desc, required, default_value,
+            value_reader);
+        options_.emplace(long_name, p);
+        ordered_.push_back(p);
+        return *this;
+    }
+#endif
 
     parser &footer(const std::string &f)
     {
@@ -634,6 +812,12 @@ public:
         return *this;
     }
 
+    parser &version(const char *version)
+    {
+        version_.assign(version);
+        return *this;
+    }
+
     parser &program_name(const std::string &name)
     {
         prog_name_ = name;
@@ -644,14 +828,27 @@ public:
     // note that is option has default value, this
     // function will still return false if it
     // didn't occur in cmdline.
+#if CMDLINE_USE_EXCEPTIONS
     bool exist(const std::string &name) const
     {
         auto it = options_.find(name);
         if (it == options_.end())
-            throw cmdline_error("there is no flag: --" + name);
+            throw cmdline_error("there is no flag: --" + name); // TODO 不要抛出异常了，而是返回false
         return it->second->has_set();
     }
+#else
+    bool exist(const std::string &name) const
+    {
+        auto it = options_.find(name);
+        if (it == options_.end()) {
+            std::cerr << "there is no flag: --" << name << '\n';
+            return false;
+        }
+        return it->second->has_set();
+    }
+#endif
 
+#if CMDLINE_USE_EXCEPTIONS
     template<typename T>
     const T &get(const std::string &name) const
     {
@@ -665,6 +862,43 @@ public:
             throw cmdline_error("option '" + name + "' is not set");
         return p->get();
     }
+#else
+#if __cplusplus >= 201703L
+    template<typename T>
+    std::optional<T> get(const std::string &name) const
+    {
+        if (options_.count(name) == 0)
+            return std::nullopt;
+        const option_with_value<T> *p =
+            dynamic_cast<const option_with_value<T> *>(options_.find(name)->second.get());
+        if (p == nullptr)
+            return std::nullopt;
+        if (!p->occurred() && !p->with_default())
+            return std::nullopt;
+        return p->get();
+    }
+#else
+    template<typename T>
+    std::pair<T, bool> get(const std::string &name) const
+    {
+        if (options_.count(name) == 0) {
+            std::cerr << "there is no option: --" << name << '\n';
+            return std::make_pair(T(), false);
+        }
+        const option_with_value<T> *p =
+            dynamic_cast<const option_with_value<T> *>(options_.find(name)->second.get());
+        if (p == nullptr) {
+            std::cerr << "type mismatch option '" << name << "'\n";
+            return std::make_pair(T(), false);
+        }
+        if (!p->occurred() && !p->with_default()) {
+            std::cerr << "option '" << name << "' is not set\n";
+            return std::make_pair(T(), false);
+        }
+        return std::make_pair(p->get(), true);
+    }
+#endif
+#endif
 
     const std::vector<std::string> &rest() const
     {
@@ -709,7 +943,7 @@ public:
             args.push_back(buf);
 
         for (size_t i = 0; i < args.size(); i++)
-            std::cerr << "\"" << args[i] << "\"" << std::endl;
+            std::cerr << "\"" << args[i] << "\"\n";
 
         return parse(args, with_program_name);
     }
@@ -875,11 +1109,6 @@ public:
         return oss.str();
     }
 
-    void version(const char *version)
-    {
-        version_.assign(version);
-    }
-
 protected:
     virtual std::string usage() const
     {
@@ -904,7 +1133,7 @@ protected:
             oss << "--" << opt->name();
             for (size_t j = opt->name().size(); j < width + 4; j++)
                 oss << ' ';
-            oss << opt->description(width + 12 + 2) << std::endl;
+            oss << opt->description(width + 12 + 2) << '\n';
         }
     }
 
@@ -920,19 +1149,25 @@ protected:
 private:
     void check(int argc, bool ok) const
     {
-        // 打印版本信息时，不打印错误信息
-        if (!version_.empty() && exist("version")) {
-            std::cerr << version_ << '\n';
-            std::exit(0);
-        }
-        // 直接输入 program_name 的情况：打印帮助信息
-        if ((argc == 1 && !ok) || exist("help")) {
-            std::cerr << help();
-            std::exit(0);
-        }
-        // 输入 program_name xxx 的情况：输出错误信息和帮助信息
-        if (!ok) {
-            std::cerr << error() << '\n'
+        try {
+            // 打印版本信息时，不打印错误信息
+            if (!version_.empty() && exist("version")) {
+                std::cerr << version_ << '\n';
+                std::exit(0);
+            }
+            // 直接输入 program_name 的情况：打印帮助信息
+            if ((argc == 1 && !ok) || exist("help")) {
+                std::cerr << help();
+                std::exit(0);
+            }
+            // 输入 program_name xxx 的情况：输出错误信息和帮助信息
+            if (!ok) {
+                std::cerr << error() << '\n'
+                          << help();
+                std::exit(1);
+            }
+        } catch (const std::exception &ex) {
+            std::cerr << ex.what() << '\n'
                       << help();
             std::exit(1);
         }
@@ -1078,7 +1313,7 @@ private:
     private:
         class description full_description() const
         {
-            return cmdline::description(" (bool)");
+            return g_config.show_option_typename ? cmdline::description(" (bool)") : cmdline::description();
         }
     };
 
@@ -1134,7 +1369,7 @@ private:
                 has_value_ = true;
                 occurred_ = true;
             } catch (const std::exception &ex) {
-                std::cerr << ex.what() << std::endl;
+                std::cerr << ex.what() << '\n';
                 return false;
             }
             return true;
@@ -1175,7 +1410,18 @@ private:
     protected:
         class description full_description(bool required, const T &default_value = T()) const
         {
-            return cmdline::description(" (" + detail::readable_typename<T>() + (required ? " required" : (with_default_ ? " [=" + detail::default_value<T>(default_value) + "]" : "")) + ")");
+            const std::string typename_str = (g_config.show_option_typename ? detail::readable_typename<T>()  : "");
+            const std::string required_str = (required ? "required" : "");
+            const std::string default_value_str = (with_default_ ? "[=" + detail::default_value<T>(default_value) + "]" : "");
+
+            std::string msg;
+            msg += typename_str.empty() ? "" : typename_str;
+            msg += required_str.empty() ? "" : required_str;
+            msg += default_value_str.empty() ? "" : default_value_str;
+            if (!msg.empty()) {
+                msg = " (" + msg + ')';
+            }
+            return cmdline::description(msg);
         }
 
         virtual T read(const std::string &s) = 0;
@@ -1274,7 +1520,7 @@ public:
             auto it = subcommands_.find(cmd_name);
             if (it == subcommands_.end()) {
                 // throw cmdline_error("undefined command: " + cmd_name);
-                std::cerr << "undefined command: " << cmd_name << std::endl;
+                std::cerr << "undefined command: " << cmd_name << '\n';
                 retcode = 1;
             } else {
                 retcode = it->second(prog_name_ + " " + cmd_name, argc - 2, argv + 2);

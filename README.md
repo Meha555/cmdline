@@ -11,6 +11,17 @@ This is a simple command line parser for C++.
 - Only one header file
 - Automatic type check
 - Support "getopt-like" style and "cobra-like" style
+- C++ Exception Support
+
+NOTE:
+- Consider cmdline arguments parsing usually handled in the very beginning of the program, so this library treats parsing errors fatally and exits the program immediately. This behavior might be changed in future, possibly will be like `boost::error_code`.
+- `cmdline::range()` is closed interval.
+- For options which are set multiple times, the latter will overwrite the former. eg:
+
+```bash
+$ ./test -h 127.0.0.1 --host=localhost
+localhost:80
+```
 
 ## Sample
 
@@ -21,48 +32,61 @@ Here show sample usages of cmdline.
 This is an example of simple usage.
 
 ```cpp
-// include cmdline.h
 #include "cmdline.h"
 
 using namespace std;
 
 int main(int argc, char *argv[])
 {
-  // create a parser
-  cmdline::parser a;
-  
-  // add specified type of variable.
-  // 1st argument is long name
-  // 2nd argument is short name (no short name if '\0' specified)
-  // 3rd argument is description
-  // 4th argument is mandatory (optional. default is false)
-  // 5th argument is default value  (optional. it used when mandatory is false)
-  a.add<string>("host", 'h', "host name", true, "");
-  
-  // 6th argument is extra constraint.
-  // Here, port number must be 1 to 65535 by cmdline::range().
-  a.add<int>("port", 'p', "port number", false, 80, cmdline::range(1, 65535));
-  
-  // cmdline::oneof() can restrict options.
-  a.add<string>("type", 't', "protocol type", false, "http", cmdline::oneof<string>("http", "https", "ssh", "ftp"));
-  
-  // Boolean flags also can be defined.
-  // Call add method without a type parameter.
-  a.add("gzip", '\0', "gzip when transfer");
-  
-  // Run parser.
-  // It returns only if command line arguments are valid.
-  // If arguments are invalid, a parser output error msgs then exit program.
-  // If help flag ('--help' or '-?') is specified, a parser output usage message then exit program.
-  a.parse_check(argc, argv);
-  
-  // use flag values
-  cout << a.get<string>("type") << "://"
-       << a.get<string>("host") << ":"
-       << a.get<int>("port") << endl;
-  
-  // boolean flags are referred by calling exist() method.
-  if (a.exist("gzip")) cout << "gzip" << endl;
+    // global config
+    cmdline::g_config.show_option_typename = true;
+
+    // create a parser
+    cmdline::parser a;
+    a.version("1.0.0").introduction("a getopt-like cli example");
+
+    // add specified type of variable.
+    // 1st argument is long name
+    // 2nd argument is short name (no short name if '\0' specified)
+    // 3rd argument is description
+    // 4th argument is mandatory (optional. default is false)
+    // 5th argument is default value  (optional. it used when mandatory is false)
+    a.option_with_default<string>("host", 'h', "host name", true, "");
+
+    // 6th argument is extra constraint.
+    // Here, port number must be 1 to 65535 by cmdline::range().
+    a.option_with_default<int>("port", 'p', "port number", false, 80, cmdline::range(1, 65535));
+
+    // cmdline::oneof() can restrict options.
+    a.option<string>("type", 't', "protocol type", false, cmdline::oneof<string>("http", "https", "ssh", "ftp"));
+
+    // cmdline::regex() can restrict values by regular expression.
+    a.option<string>("tell", 0, "telephone number", false, cmdline::regex<string>(R"(^1[3-9]\d{9}$)"));
+
+    // Boolean flags also can be defined.
+    // Call add method without a type parameter.
+    a.flag("gzip", '\0', "gzip when transfer");
+
+    // Run parser.
+    // It returns only if command line arguments are valid.
+    // If arguments are invalid, a parser output error msgs then exit program.
+    // If help flag ('--help' or '-?') is specified, a parser output usage message then exit program.
+    a.parse_check(argc, argv);
+
+    try {
+        // use flag values
+        cout << a.get<string>("type") << "://"
+             << a.get<string>("host") << ":"
+             << a.get<int>("port") << endl;
+        cout << a.get<string>("tell") << endl;
+
+        // boolean flags are referred by calling exist() method.
+        if (a.exist("gzip"))
+            cout << "gzip" << endl;
+    } catch (const std::exception &ex) {
+        cout << ex.what() << endl;
+        return 1;
+    }
 }
 ```
 
@@ -70,79 +94,55 @@ Here are some execution results:
 
 ```bash
 $ ./test
-usage: ./test --host=string [options] ... 
+a getopt-like cli example
+
 options:
-  -h, --host    host name (string)
-  -p, --port    port number (int [=80])
-  -t, --type    protocol type (string [=http])
-      --gzip    gzip when transfer
-  -?, --help    print this message
+  -h, --host       host name (string required)
+  -p, --port       port number (int [=80]) [1, 65535]
+  -t, --type       protocol type (string) {http|https|ssh|ftp}
+      --tell       telephone number (string) "^1[3-9]\d{9}$"
+      --gzip       gzip when transfer (bool)
+  -?, --help       print this message (bool)
+  -V, --version    show version (bool)
 ```
 
 ```bash
 $ ./test -?
-usage: ./test --host=string [options] ... 
+a getopt-like cli example
+
 options:
-  -h, --host    host name (string)
-  -p, --port    port number (int [=80])
-  -t, --type    protocol type (string [=http])
-     --gzip    gzip when transfer
-  -?, --help    print this message
+  -h, --host       host name (string required)
+  -p, --port       port number (int [=80]) [1, 65535]
+  -t, --type       protocol type (string) {http|https|ssh|ftp}
+      --tell       telephone number (string) "^1[3-9]\d{9}$"
+      --gzip       gzip when transfer (bool)
+  -?, --help       print this message (bool)
+  -V, --version    show version (bool)
 ```
 
 ```bash
-$ ./test --host=github.com
+$ ./test --host=github.com -t http --tell=13333333333 --gzip
 http://github.com:80
-```
-
-```bash
-$ ./test --host=github.com -t ftp
-ftp://github.com:80
-```
-
-```bash
-$ ./test --host=github.com -t ttp
-option value is invalid: --type=ttp
-usage: ./test --host=string [options] ... 
-options:
-  -h, --host    host name (string)
-  -p, --port    port number (int [=80])
-  -t, --type    protocol type (string [=http])
-      --gzip    gzip when transfer
-  -?, --help    print this message
-```
-
-```bash
-$ ./test --host=github.com -p 4545
-http://github.com:4545
-```
-
-```bash
-$ ./test --host=github.com -p 100000
-option value is invalid: --port=100000
-usage: ./test --host=string [options] ... 
-options:
-  -h, --host    host name (string)
-  -p, --port    port number (int [=80])
-  -t, --type    protocol type (string [=http])
-      --gzip    gzip when transfer
-  -?, --help    print this message
-```
-
-```bash
-$ ./test --host=github.com --gzip
-http://github.com:80
+13333333333
 gzip
 ```
 
-Note:
-
-- For options which are set multiple times, the latter will overwrite the former. eg:
-- `cmdline::range()` is closed interval.
-
 ```bash
-$ ./test -h 127.0.0.1 --host=localhost
-localhost:80
+$ ./test --host=github.com -t sock --tell=12345678901
+sock not in {http|https|ssh|ftp}
+12345678901 doesn't match "^1[3-9]\d{9}$"
+option value is invalid: --type=sock
+usage: F:\repos\personal\cmdline\build\examples\exp0.exe [options] ...
+a getopt-like cli example
+
+options:
+  -h, --host       host name (string required)
+  -p, --port       port number (int [=80]) [1, 65535]
+  -t, --type       protocol type (string) {http|https|ssh|ftp}
+      --tell       telephone number (string) "^1[3-9]\d{9}$"
+      --gzip       gzip when transfer (bool)
+  -?, --help       print this message (bool)
+  -V, --version    show version (bool)
 ```
 
 ### Advance usage
@@ -173,9 +173,9 @@ int main(int argc, char *argv[])
         }
     });
     subCmd
-        .add<string>("host", 'h', cmdline::description("host name", "example:\n  --host=localhost\n  -h 127.0.0.1"), true, "")
-        .add<int>("port", 'p', "port number", false, 80, cmdline::range(1, 65535))
-        .add("gzip", '\0', "gzip when transfer")
+        .option<string>("host", 'h', cmdline::description("host name", "example:\n  --host=localhost\n  -h 127.0.0.1"), true, "")
+        .option<int>("port", 'p', "port number", false, 80, cmdline::range(1, 65535))
+        .flag("gzip", '\0', "gzip when transfer")
         .footer("this is footer for sub-command")
         .introduction("this is introduction for sub-command");
 
@@ -194,8 +194,8 @@ int main(int argc, char *argv[])
         }
     });
     rootCmd
-        .add<string>("type", 't', "protocol type", false, "http", cmdline::oneof<string>("http", "https", "ssh", "ftp"))
-        .add("version", 'v', "version number")
+        .option<string>("type", 't', "protocol type", false, "http", cmdline::oneof<string>("http", "https", "ssh", "ftp"))
+        .flag("version", 'v', "version number")
         .footer("this is footer for root command")
         .introduction("this is introduction for root command");
 

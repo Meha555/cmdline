@@ -6,6 +6,9 @@ using namespace std;
 
 int main(int argc, char *argv[])
 {
+    // global config
+    cmdline::g_config.show_option_typename = false;
+
     cmdline::parser a;
     a.option_with_default<string>("host", 'h', cmdline::description("host name", "example:\n  --host=localhost\n  -h 127.0.0.1"), true, "");
     a.option<int>("port", 'p', "port number", false, cmdline::range(1, 65535));
@@ -19,16 +22,17 @@ int main(int argc, char *argv[])
     // parse and check automatically
     a.parse_check(argc, argv);
 
+    cout.setf(ios::boolalpha);
+    std::stringstream oss;
+#if CMDLINE_USE_EXCEPTIONS
     try {
-        cout << boolalpha
-             << "host: " << a.exist("host") << endl
+        cout << "host: " << a.exist("host") << endl
              << "port: " << a.exist("port") << endl
              << "type: " << a.exist("type") << endl
              << "tell: " << a.exist("tell") << endl
              << "regex: " << a.exist("regex") << endl
              << "gzip: " << a.exist("gzip") << endl;
 
-        std::stringstream oss;
         oss << a.get<string>("type") << "://"
              << a.get<string>("host") << ":"
              << a.get<int>("port"); // if port is not set, it will throw a cmdline_error
@@ -44,6 +48,33 @@ int main(int argc, char *argv[])
         cout << ex.what() << endl;
         return 1;
     }
+#else
+    cout << "host: " << a.exist("host") << endl
+         << "port: " << a.exist("port") << endl
+         << "type: " << a.exist("type") << endl
+         << "tell: " << a.exist("tell") << endl
+         << "regex: " << a.exist("regex") << endl
+         << "gzip: " << a.exist("gzip") << endl;
+
+    auto host = a.get<string>("host");
+    auto port = a.get<int>("port");
+    auto type = a.get<string>("type");
+    if (type.second && host.second && port.second) {
+        oss << type.first << "://" << host.first << ":" << port.first;
+    }
+    cout << oss.str() << endl;
+
+    auto tell = a.get<string>("tell");
+    if (tell.second) {
+        cout << "tell: " << tell.first << endl;
+    }
+    auto re = a.get<regex>("regex");
+    if (re.second) {
+        cout << "valid: " << std::regex_match(oss.str(), re.first) << endl;
+    }
+    if (a.exist("gzip"))
+        cout << "gzip" << endl;
+#endif
 
     return 0;
 }

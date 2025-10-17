@@ -12,7 +12,13 @@ int main(int argc, char *argv[])
                 cout << "list all images" << endl;
             }
             if (cmd->exist("introspect")) {
+#if CMDLINE_USE_EXCEPTIONS
                 cout << "introspect image: " << cmd->get<string>("introspect") << endl;
+#else
+                auto image = cmd->get<string>("introspect");
+                if (image.second)
+                    cout << "introspect image: " << image.first << endl;
+#endif
             }
             return 0;
         } catch (const std::exception &ex) {
@@ -33,7 +39,13 @@ int main(int argc, char *argv[])
                 cout << "list all containers" << endl;
             }
             if (cmd->exist("introspect")) {
+#if CMDLINE_USE_EXCEPTIONS
                 cout << "introspect container: " << cmd->get<string>("introspect") << endl;
+#else
+                auto container = cmd->get<string>("introspect");
+                if (container.second)
+                    cout << "introspect container: " << container.first << endl;
+#endif
             }
             return 0;
         } catch (const std::exception &ex) {
@@ -49,17 +61,33 @@ int main(int argc, char *argv[])
     // root command
     cmdline::command rootCmd("mydocker", "my docker client", [](cmdline::command *cmd) -> int {
         try {
+            bool hasHit = false;
             if (cmd->exist("version")) {
+                hasHit = true;
                 cout << "0.1.0" << endl;
             } else {
                 if (cmd->exist("pull")) {
+                    hasHit = true;
+#if CMDLINE_USE_EXCEPTIONS
                     cout << "pull image: " << cmd->get<string>("pull") << endl;
+#else
+                    auto image = cmd->get<string>("pull");
+                    if (image.second)
+                        cout << "pull image: " << image.first << endl;
+#endif
                 }
                 if (cmd->exist("run")) {
+                    hasHit = true;
+#if CMDLINE_USE_EXCEPTIONS
                     cout << "run container: " << cmd->get<string>("run") << endl;
+#else
+                    auto container = cmd->get<string>("run");
+                    if (container.second)
+                        cout << "run container: " << container.first << endl;
+#endif
                 }
             }
-            return 0;
+            return !hasHit;
         } catch (const std::exception &ex) {
             std::cerr << ex.what() << std::endl;
             return 1;
