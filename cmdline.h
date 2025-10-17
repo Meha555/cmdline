@@ -6,6 +6,7 @@
 #include <iostream>
 #include <map>
 #include <memory>
+#include <regex>
 #include <sstream>
 #include <string>
 #include <typeinfo>
@@ -81,6 +82,26 @@ struct lexical_cast_t<Target, std::string, false>
     }
 };
 
+template<>
+struct lexical_cast_t<std::string, std::regex, false>
+{
+    static std::string cast(const std::regex &)
+    {
+        // We can't extract the pattern from std::regex, so we just return a placeholder
+        // In practice, if you need this conversion, you should store the pattern separately
+        return "<regex>";
+    }
+};
+
+template<>
+struct lexical_cast_t<std::regex, std::string, false>
+{
+    static std::regex cast(const std::string &arg)
+    {
+        return std::regex(arg);
+    }
+};
+
 // template<typename T1, typename T2>
 // struct is_same
 // {
@@ -125,6 +146,12 @@ template<>
 inline std::string readable_typename<std::string>()
 {
     return "string";
+}
+
+template<>
+inline std::string readable_typename<std::regex>()
+{
+    return "regex";
 }
 
 template<typename T>
@@ -231,6 +258,31 @@ Reader oneof_impl(Reader &reader, T &&first, Rest &&...rest)
     return oneof_impl(reader, std::forward<Rest>(rest)...);
 }
 
+template<typename T>
+struct regex_reader
+{
+    regex_reader(const std::string &pattern)
+        : re_(pattern)
+        , pattern_(pattern)
+    {
+    }
+    T operator()(const std::string &s) {
+        std::match_results<typename T::const_iterator> match;
+        if (!std::regex_search(s, match, re_)) {
+            throw cmdline_error(s + " doesn't match " + constraint());
+        }
+        return match[0];
+    }
+    const std::string constraint()
+    {
+        return "\"" + pattern_ + "\"";
+    }
+
+private:
+    std::regex re_;
+    std::string pattern_;
+};
+
 } // namespace detail
 
 template<typename T>
@@ -244,6 +296,12 @@ detail::oneof_reader<T> oneof(Rest &&...rest)
 {
     detail::oneof_reader<T> reader;
     return detail::oneof_impl(reader, std::forward<Rest>(rest)...);
+}
+
+template<typename T>
+detail::regex_reader<T> regex(const std::string &pattern)
+{
+    return detail::regex_reader<T>(pattern);
 }
 
 // template <typename T>
@@ -986,6 +1044,7 @@ private:
                              const class description &desc)
             : option_base(long_name, short_name, desc)
         {
+            this->desc_.wrap(full_description());
         }
 
         ~option_without_value() = default;
@@ -1014,6 +1073,12 @@ private:
         std::string short_description() const override
         {
             return "--" + nam_;
+        }
+
+    private:
+        class description full_description() const
+        {
+            return cmdline::description(" (bool)");
         }
     };
 
