@@ -221,15 +221,6 @@ struct oneof_reader
     }
     const std::string &constraint()
     {
-        // static std::string msg = "{";
-        // for (size_t i = 0; i < alts_.size(); ++i) {
-        //     msg += detail::lexical_cast<T>(alts_[i]);
-        //     if (i != alts_.size() - 1) {
-        //         msg += "|";
-        //     }
-        // }
-        // msg += "}";
-        // return msg;
         msg_.clear();
         msg_ = "{";
         for (size_t i = 0; i < alts_.size(); ++i) {
@@ -272,7 +263,7 @@ struct regex_reader
     T operator()(const std::string &s)
     {
         std::match_results<typename T::const_iterator> match;
-        if (!std::regex_search(s, match, re_)) {
+        if (!std::regex_match(s, match, re_)) { // use regex_match to ensure full match
             throw cmdline_error(s + " doesn't match " + constraint());
         }
         return match[0];

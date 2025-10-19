@@ -16,6 +16,7 @@ This is a simple command line parser for C++.
 NOTE:
 - Consider cmdline arguments parsing usually handled in the very beginning of the program, so this library treats parsing errors fatally and exits the program immediately. This behavior might be changed in future, possibly will be like `boost::error_code`.
 - `cmdline::range()` is closed interval.
+- When you use `cmdline::regex()`, always remember to encapsulate the regex with `^` and `$`.
 - For options which are set multiple times, the latter will overwrite the former. eg:
 
 ```bash
