@@ -27,11 +27,11 @@
 namespace cmdline
 {
 
-class cmdline_error : public std::exception
+class cmdline_error : public std::logic_error
 {
 public:
     cmdline_error(const std::string &message)
-        : std::exception(message.c_str())
+        : std::logic_error(message)
     {
     }
 };
@@ -104,18 +104,6 @@ struct lexical_cast_t<std::regex, std::string, false>
         return std::regex(arg);
     }
 };
-
-// template<typename T1, typename T2>
-// struct is_same
-// {
-//     static const bool value = false;
-// };
-
-// template<typename T>
-// struct is_same<T, T>
-// {
-//     static const bool value = true;
-// };
 
 template<typename Target, typename Source>
 Target lexical_cast(const Source &arg)
