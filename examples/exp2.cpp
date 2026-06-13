@@ -27,17 +27,21 @@ int main(int argc, char *argv[])
         }
 
         if (!ok) {
-            cerr << a.error() << endl
-                 << a.help();
+            cerr << a.error() << endl;
             return 1;
         }
-#if CMDLINE_USE_EXCEPTIONS
+#ifdef CMDLINE_USE_EXCEPTIONS
         cout << a.get<string>("host") << ":" << a.get<int>("port") << endl;
 #else
         auto host = a.get<string>("host");
         auto port = a.get<int>("port");
+#if __cplusplus >= 201703L
+        if (host && port)
+            cout << *host << ":" << *port << endl;
+#else
         if (host.second && port.second)
             cout << host.first << ":" << port.first << endl;
+#endif
 #endif
     } catch (const std::exception &ex) {
         cerr << ex.what() << endl;

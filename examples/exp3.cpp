@@ -12,12 +12,17 @@ int main(int argc, char *argv[])
                 cout << "list all images" << endl;
             }
             if (cmd->exist("introspect")) {
-#if CMDLINE_USE_EXCEPTIONS
+#ifdef CMDLINE_USE_EXCEPTIONS
                 cout << "introspect image: " << cmd->get<string>("introspect") << endl;
 #else
                 auto image = cmd->get<string>("introspect");
+#if __cplusplus >= 201703L
+                if (image)
+                    cout << "introspect image: " << *image << endl;
+#else
                 if (image.second)
                     cout << "introspect image: " << image.first << endl;
+#endif
 #endif
             }
             return 0;
@@ -39,12 +44,17 @@ int main(int argc, char *argv[])
                 cout << "list all containers" << endl;
             }
             if (cmd->exist("introspect")) {
-#if CMDLINE_USE_EXCEPTIONS
+#ifdef CMDLINE_USE_EXCEPTIONS
                 cout << "introspect container: " << cmd->get<string>("introspect") << endl;
 #else
                 auto container = cmd->get<string>("introspect");
+#if __cplusplus >= 201703L
+                if (container)
+                    cout << "introspect container: " << *container << endl;
+#else
                 if (container.second)
                     cout << "introspect container: " << container.first << endl;
+#endif
 #endif
             }
             return 0;
@@ -68,22 +78,32 @@ int main(int argc, char *argv[])
             } else {
                 if (cmd->exist("pull")) {
                     hasHit = true;
-#if CMDLINE_USE_EXCEPTIONS
+#ifdef CMDLINE_USE_EXCEPTIONS
                     cout << "pull image: " << cmd->get<string>("pull") << endl;
 #else
                     auto image = cmd->get<string>("pull");
+#if __cplusplus >= 201703L
+                    if (image)
+                        cout << "pull image: " << *image << endl;
+#else
                     if (image.second)
                         cout << "pull image: " << image.first << endl;
+#endif
 #endif
                 }
                 if (cmd->exist("run")) {
                     hasHit = true;
-#if CMDLINE_USE_EXCEPTIONS
+#ifdef CMDLINE_USE_EXCEPTIONS
                     cout << "run container: " << cmd->get<string>("run") << endl;
 #else
                     auto container = cmd->get<string>("run");
+#if __cplusplus >= 201703L
+                    if (container)
+                        cout << "run container: " << *container << endl;
+#else
                     if (container.second)
                         cout << "run container: " << container.first << endl;
+#endif
 #endif
                 }
             }
@@ -104,5 +124,10 @@ int main(int argc, char *argv[])
     rootCmd.add(std::move(containerCmd));
 
     // execute
-    return rootCmd(argc, argv);
+    try {
+        return rootCmd(argc, argv);
+    } catch (const cmdline::cmdline_error &ex) {
+        cerr << ex.what() << endl;
+        return 1;
+    }
 }

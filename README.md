@@ -14,7 +14,8 @@ This is a simple command line parser for C++.
 - C++ Exception Support
 
 NOTE:
-- Consider cmdline arguments parsing usually handled in the very beginning of the program, so this library treats parsing errors fatally and exits the program immediately. This behavior might be changed in future, possibly will be like `boost::error_code`.
+- `parse_check()` throws `cmdline::cmdline_error` for invalid arguments instead of exiting the process. Help and version requests are not errors: `parse_check()` returns `false`, so callers can print `help()` or `version()` and return normally. Help is only printed when users explicitly pass `--help` or `-?`.
+- Define `CMDLINE_USE_EXCEPTIONS` to enable the exception-oriented `get<T>()` API. When it is not defined, `get<T>()` uses the non-exception return style for the selected C++ standard.
 - `cmdline::range()` is closed interval.
 - When you use `cmdline::regex()`, always remember to encapsulate the regex with `^` and `$`.
 - For options which are set multiple times, the latter will overwrite the former. eg:
@@ -23,6 +24,88 @@ NOTE:
 $ ./test -h 127.0.0.1 --host=localhost
 localhost:80
 ```
+
+## API Reference
+
+### Basic Types
+
+| Interface | Description |
+| --- | --- |
+| `cmdline::parser` | getopt-like command line parser. Use it to define options, parse arguments, query values, and generate help text. |
+| `cmdline::command` | cobra-like command wrapper built on top of `parser`. Use it to build root commands and one-level subcommands. |
+| `cmdline::cmdline_error` | Exception type thrown for invalid command line input or invalid parser usage. |
+| `cmdline::description` | Option description with optional multi-line detail text for help output. |
+
+### Parser Configuration
+
+| Interface | Description |
+| --- | --- |
+| `parser::footer(text)` | Set footer text appended to the usage line, such as positional argument hints. |
+| `parser::introduction(text)` | Set introduction text printed before the options section. |
+| `parser::version(text)` | Set the version string used by the automatically added `--version` / `-V` flag. |
+| `parser::version()` | Return the configured version string. |
+| `parser::program_name(name)` | Override the program name shown in help text. By default it is taken from `argv[0]`. |
+
+### Defining Options
+
+| Interface | Description |
+| --- | --- |
+| `parser::flag(name, short_name, desc)` | Define a boolean flag that does not take a value. |
+| `parser::option<T>(name, short_name, desc, required)` | Define an option with a value of type `T`. |
+| `parser::option<T>(name, short_name, desc, required, default_value)` | Define an option with a default value. |
+| `parser::option<T>(name, short_name, desc, required, reader)` | Define an option with a custom reader or constraint. |
+| `parser::option_with_default<T>(...)` | Define an option and explicitly provide a default value. |
+
+### Parsing
+
+| Interface | Description |
+| --- | --- |
+| `parser::parse(argc, argv, with_program_name)` | Parse arguments and return `true` when valid. On failure it returns `false` and stores errors. |
+| `parser::parse(args, with_program_name)` | Parse a `std::vector<std::string>`. |
+| `parser::parse(arg, with_program_name)` | Tokenize and parse a command line string. |
+| `parser::parse_check(...)` | Parse and validate arguments. Returns `true` when the command should continue. Returns `false` for help/version requests. Throws `cmdline_error` for invalid arguments. |
+
+### Querying Results
+
+| Interface | Description |
+| --- | --- |
+| `parser::exist(name)` | Return whether an option or flag appeared in the parsed command line. This function does not throw for missing names; it returns `false`. |
+| `parser::get<T>(name)` with `CMDLINE_USE_EXCEPTIONS` | Return the parsed value by const reference. Throws `cmdline_error` if the option is missing, has a different type, or has no value. |
+| `parser::get<T>(name)` without `CMDLINE_USE_EXCEPTIONS` on C++17+ | Return `std::optional<T>`. Empty optional means the value is unavailable. |
+| `parser::get<T>(name)` without `CMDLINE_USE_EXCEPTIONS` on C++11/14 | Return `std::pair<T, bool>`. The boolean indicates whether the value is available. |
+| `parser::rest()` | Return positional arguments that were not parsed as options. |
+
+### Errors And Help Text
+
+| Interface | Description |
+| --- | --- |
+| `parser::error()` | Return the first parse error message. |
+| `parser::error_full()` | Return all parse error messages separated by newlines. |
+| `parser::help()` | Generate usage and option help text. The caller decides where to print it. |
+
+### Constraints And Readers
+
+| Interface | Description |
+| --- | --- |
+| `cmdline::range(low, high)` | Accept values in a closed interval `[low, high]`. |
+| `cmdline::oneof(values...)` | Accept only one of the listed values. |
+| `cmdline::regex(pattern)` | Accept string values matching a regular expression. Use `^` and `$` if a full-string match is required. |
+
+### Commands
+
+| Interface | Description |
+| --- | --- |
+| `cmdline::command(name, desc, callback)` | Create a command. The callback receives a pointer to the command after parsing. |
+| `command::add(subcommand)` | Add a subcommand. Subcommands are moved into the parent command. |
+| `command::operator()(argc, argv)` | Parse and execute a root command. It returns the callback return code, or `0` for handled help/version requests. |
+| `command::name()` | Return the command name. |
+| `command::description()` | Return the command description. |
+
+### Compile-Time Options
+
+| Macro | Description |
+| --- | --- |
+| `CMDLINE_USE_EXCEPTIONS` | Enables exception-oriented `get<T>()` behavior. When not defined, `get<T>()` returns `std::optional<T>` on C++17+ or `std::pair<T, bool>` on C++11/14. |
 
 ## Sample
 
@@ -68,13 +151,20 @@ int main(int argc, char *argv[])
     // Call add method without a type parameter.
     a.flag("gzip", '\0', "gzip when transfer");
 
-    // Run parser.
-    // It returns only if command line arguments are valid.
-    // If arguments are invalid, a parser output error msgs then exit program.
-    // If help flag ('--help' or '-?') is specified, a parser output usage message then exit program.
-    a.parse_check(argc, argv);
-
     try {
+        // Run parser.
+        // It returns true only if command line arguments are valid.
+        // If arguments are invalid, parse_check() throws cmdline::cmdline_error.
+        // If help or version is requested, parse_check() returns false.
+        if (!a.parse_check(argc, argv)) {
+            if (a.exist("version")) {
+                cout << a.version() << endl;
+            } else {
+                cout << a.help();
+            }
+            return 0;
+        }
+
         // use flag values
         cout << a.get<string>("type") << "://"
              << a.get<string>("host") << ":"
@@ -84,6 +174,9 @@ int main(int argc, char *argv[])
         // boolean flags are referred by calling exist() method.
         if (a.exist("gzip"))
             cout << "gzip" << endl;
+    } catch (const cmdline::cmdline_error &ex) {
+        cerr << ex.what();
+        return 1;
     } catch (const std::exception &ex) {
         cout << ex.what() << endl;
         return 1;
@@ -97,7 +190,7 @@ Here are some execution results:
 $ ./test
 a getopt-like cli example
 
-options:
+Options:
   -h, --host       host name (string required)
   -p, --port       port number (int [=80]) [1, 65535]
   -t, --type       protocol type (string) {http|https|ssh|ftp}
@@ -111,7 +204,7 @@ options:
 $ ./test -?
 a getopt-like cli example
 
-options:
+Options:
   -h, --host       host name (string required)
   -p, --port       port number (int [=80]) [1, 65535]
   -t, --type       protocol type (string) {http|https|ssh|ftp}
@@ -133,10 +226,10 @@ $ ./test --host=github.com -t sock --tell=12345678901
 sock not in {http|https|ssh|ftp}
 12345678901 doesn't match "^1[3-9]\d{9}$"
 option value is invalid: --type=sock
-usage: F:\repos\personal\cmdline\build\examples\exp0.exe [options] ...
+Usage: F:\repos\personal\cmdline\build\examples\exp0.exe [options] ...
 a getopt-like cli example
 
-options:
+Options:
   -h, --host       host name (string required)
   -p, --port       port number (int [=80]) [1, 65535]
   -t, --type       protocol type (string) {http|https|ssh|ftp}
@@ -204,7 +297,12 @@ int main(int argc, char *argv[])
     rootCmd.add(std::move(subCmd));
 
     // execute
-    return rootCmd(argc, argv);
+    try {
+        return rootCmd(argc, argv);
+    } catch (const cmdline::cmdline_error &ex) {
+        cerr << ex.what() << endl;
+        return 1;
+    }
 }
 ```
 
@@ -212,12 +310,12 @@ Here are some execution results:
 
 ```bash
 $ ./test -?
-usage: test [command] [options] ... this is footer for root command
+Usage: test [command] [options] ... this is footer for root command
 this is introduction for root command
 
-commands:
+Commands:
   action          sub-command action
-options:
+Options:
   -t, --type       protocol type (string)
   -v, --version    version number
   -?, --help       print this message
@@ -225,10 +323,10 @@ options:
 
 ```bash
 $ ./test action -?
-usage: test action [command] [options] ... this is footer for sub-command
+Usage: test action [command] [options] ... this is footer for sub-command
 this is introduction for sub-command
 
---host=string options:
+--host=string Options:
   -h, --host    host name (string)
                   example:
                     --host=localhost
@@ -248,12 +346,12 @@ gzip
 ```bash
 $ ./test --host=127.0.0.1 --port=123 --gzip
 undefined option: --host
-usage: test [command] [options] ... this is footer for root command
+Usage: test [command] [options] ... this is footer for root command
 this is introduction for root command
 
-commands:
+Commands:
   action          sub-command action
-options:
+Options:
   -t, --type       protocol type (string)
   -v, --version    version number
   -?, --help       print this message
@@ -293,8 +391,8 @@ Result is:
 
 ```bash
 $ ./test
-usage: ./test --host=string [options] ... filename ...
-options:
+Usage: ./test --host=string [options] ... filename ...
+Options:
   -h, --host    host name (string)
   -p, --port    port number (int [=80])
   -t, --type    protocol type (string [=http])
@@ -316,9 +414,9 @@ Result is:
 
 ```bash
 $ ./test
-usage: ./test --host=string [options] ... 
+Usage: ./test --host=string [options] ... 
 this is introduction
-options:
+Options:
   -h, --host    host name (string)
   -p, --port    port number (int [=80])
   -t, --type    protocol type (string [=http])
@@ -334,7 +432,7 @@ Default program name is determined by `argv[0]`. `program_name()` method can set
 
 ### Process flags manually
 
-`parse_check()` method parses command line arguments and check error and help flag. You can do this process manually.
+`parse_check()` method parses command line arguments and checks errors, help, and version flags. It throws `cmdline::cmdline_error` for invalid arguments, and returns `false` for explicit help or version requests so the caller can print `help()` or `version()` normally. It does not print help for ordinary command line errors. You can do this process manually.
 
 `parse()` method parses command line arguments then returns if they are valid. You should check the result, and do what you want yourself.
 

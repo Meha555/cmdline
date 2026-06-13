@@ -8,10 +8,11 @@
 #include <memory>
 #include <regex>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <typeinfo>
 #include <vector>
-#if CMDLINE_USE_EXCEPTIONS && __cplusplus >= 201703L
+#if !defined(CMDLINE_USE_EXCEPTIONS) && __cplusplus >= 201703L
 #include <optional>
 #endif
 
@@ -27,11 +28,11 @@
 namespace cmdline
 {
 
-class cmdline_error : public std::logic_error
+class cmdline_error : public std::runtime_error
 {
 public:
     cmdline_error(const std::string &message)
-        : std::logic_error(message)
+        : std::runtime_error(message)
     {
     }
 };
@@ -479,7 +480,7 @@ public:
     parser &operator=(parser &&other) noexcept = default;
     ~parser() = default;
 
-#if CMDLINE_USE_EXCEPTIONS
+#ifdef CMDLINE_USE_EXCEPTIONS
     // add flag
     parser &flag(const std::string &long_name, char short_name = 0,
                  const std::string &description = "")
@@ -513,12 +514,10 @@ public:
                  const std::string &description = "")
     {
         if (long_name.empty()) {
-            std::cerr << "flag only accetps long name\n";
-            std::exit(1);
+            throw cmdline_error("flag only accetps long name");
         }
         if (options_.count(long_name)) {
-            std::cerr << "multiple flag definition: " << long_name << '\n';
-            std::exit(1);
+            throw cmdline_error("multiple flag definition: " + long_name);
         }
         auto p = new option_without_value(long_name, short_name, description);
         options_.emplace(long_name, p);
@@ -531,12 +530,10 @@ public:
                  const class description &desc = description())
     {
         if (long_name.empty()) {
-            std::cerr << "flag only accetps long name\n";
-            std::exit(1);
+            throw cmdline_error("flag only accetps long name");
         }
         if (options_.count(long_name)) {
-            std::cerr << "multiple flag definition: " << long_name << '\n';
-            std::exit(1);
+            throw cmdline_error("multiple flag definition: " + long_name);
         }
         auto p = new option_without_value(long_name, short_name, desc);
         options_.emplace(long_name, p);
@@ -555,7 +552,7 @@ public:
                                    detail::default_reader<T>());
     }
 
-#if CMDLINE_USE_EXCEPTIONS
+#ifdef CMDLINE_USE_EXCEPTIONS
     // add option with value
     template<typename T>
     parser &option(const std::string &long_name, char short_name = 0,
@@ -580,12 +577,10 @@ public:
                    const std::string &description = "", bool required = true)
     {
         if (long_name.empty()) {
-            std::cerr << "option only accepts long name\n";
-            std::exit(1);
+            throw cmdline_error("option only accepts long name");
         }
         if (options_.count(long_name)) {
-            std::cerr << "multiple flag/option definition: " << long_name << '\n';
-            std::exit(1);
+            throw cmdline_error("multiple flag/option definition: " + long_name);
         }
         auto p = new option_with_value_with_reader<T, detail::default_reader<T>>(long_name, short_name, description, required, detail::default_reader<T>{});
         options_.emplace(long_name, std::unique_ptr<option_base>(p));
@@ -599,12 +594,10 @@ public:
                    const class description &desc = description(), bool required = true)
     {
         if (long_name.empty()) {
-            std::cerr << "option only accepts long name\n";
-            std::exit(1);
+            throw cmdline_error("option only accepts long name");
         }
         if (options_.count(long_name)) {
-            std::cerr << "multiple flag/option definition: " << long_name << '\n';
-            std::exit(1);
+            throw cmdline_error("multiple flag/option definition: " + long_name);
         }
         auto p = new option_with_value_with_reader<T, detail::default_reader<T>>(long_name, short_name, desc, required, detail::default_reader<T>{});
         options_.emplace(long_name, std::unique_ptr<option_base>(p));
@@ -613,7 +606,7 @@ public:
     }
 #endif
 
-#if CMDLINE_USE_EXCEPTIONS
+#ifdef CMDLINE_USE_EXCEPTIONS
     // add option with value
     template<typename T, typename R>
     typename std::enable_if<std::is_same<decltype(std::declval<R>().operator()(std::declval<const std::string &>())), T>::value, parser &>::type
@@ -700,8 +693,7 @@ public:
                         const T default_value = T(), R value_reader = R())
     {
         if (options_.count(long_name)) {
-            std::cerr << "multiple option definition: " << long_name << '\n';
-            std::exit(1);
+            throw cmdline_error("multiple option definition: " + long_name);
         }
         auto p = new option_with_value_with_reader<T, R>(
             long_name, short_name, description, required, default_value,
@@ -719,8 +711,7 @@ public:
            R value_reader = R())
     {
         if (options_.count(long_name)) {
-            std::cerr << "multiple option definition: " << long_name << '\n';
-            std::exit(1);
+            throw cmdline_error("multiple option definition: " + long_name);
         }
         auto p = new option_with_value_with_reader<T, R>(
             long_name, short_name, description, required,
@@ -738,8 +729,7 @@ public:
            R value_reader = R())
     {
         if (options_.count(long_name)) {
-            std::cerr << "multiple option definition: " << long_name << '\n';
-            std::exit(1);
+            throw cmdline_error("multiple option definition: " + long_name);
         }
         auto p = new option_with_value_with_reader<T, R>(
             long_name, short_name, desc, required,
@@ -767,8 +757,7 @@ public:
                         const T default_value = T(), R value_reader = R())
     {
         if (options_.count(long_name)) {
-            std::cerr << "multiple option definition: " << long_name << '\n';
-            std::exit(1);
+            throw cmdline_error("multiple option definition: " + long_name);
         }
         auto p = new option_with_value_with_reader<T, R>(
             long_name, short_name, desc, required, default_value,
@@ -785,18 +774,33 @@ public:
         return *this;
     }
 
+    /**
+     * @brief Set the introduction text printed before the options section.
+     * @param intro Introduction text.
+     * @return Reference to this parser for method chaining.
+     */
     parser &introduction(const std::string &intro)
     {
         intro_ = intro;
         return *this;
     }
 
+    /**
+     * @brief Set the version string used by the automatically added version flag.
+     * @param version Version text to return from version().
+     * @return Reference to this parser for method chaining.
+     */
     parser &version(const char *version)
     {
         version_.assign(version);
         return *this;
     }
 
+    /**
+     * @brief Set the program name displayed in generated usage text.
+     * @param name Program name.
+     * @return Reference to this parser for method chaining.
+     */
     parser &program_name(const std::string &name)
     {
         prog_name_ = name;
@@ -807,15 +811,11 @@ public:
     // note that is option has default value, this
     // function will still return false if it
     // didn't occur in cmdline.
-#if CMDLINE_USE_EXCEPTIONS
-    bool exist(const std::string &name) const
-    {
-        auto it = options_.find(name);
-        if (it == options_.end())
-            throw cmdline_error("there is no flag: --" + name); // TODO 不要抛出异常了，而是返回false
-        return it->second->has_set();
-    }
-#else
+    /**
+     * @brief Check whether an option or flag occurred in the parsed command line.
+     * @param name Long option name without leading dashes.
+     * @return true if the option was present in the command line; false otherwise.
+     */
     bool exist(const std::string &name) const
     {
         auto it = options_.find(name);
@@ -825,9 +825,15 @@ public:
         }
         return it->second->has_set();
     }
-#endif
 
-#if CMDLINE_USE_EXCEPTIONS
+#ifdef CMDLINE_USE_EXCEPTIONS
+    /**
+     * @brief Get a parsed option value.
+     * @tparam T Expected option value type.
+     * @param name Long option name without leading dashes.
+     * @return Const reference to the stored option value.
+     * @throws cmdline_error if the option is missing, has a different type, or has no value.
+     */
     template<typename T>
     const T &get(const std::string &name) const
     {
@@ -836,13 +842,19 @@ public:
         const option_with_value<T> *p =
             dynamic_cast<const option_with_value<T> *>(options_.find(name)->second.get());
         if (p == nullptr)
-            throw cmdline_error("type mismatch option '" + name + "'");
+            throw cmdline_error("type mismatch option: --" + name);
         if (!p->occurred() && !p->with_default())
-            throw cmdline_error("option '" + name + "' is not set");
+            throw cmdline_error("option --" + name + " is not set");
         return p->get();
     }
 #else
 #if __cplusplus >= 201703L
+    /**
+     * @brief Try to get a parsed option value without throwing.
+     * @tparam T Expected option value type.
+     * @param name Long option name without leading dashes.
+     * @return Parsed value when available; std::nullopt otherwise.
+     */
     template<typename T>
     std::optional<T> get(const std::string &name) const
     {
@@ -857,6 +869,12 @@ public:
         return p->get();
     }
 #else
+    /**
+     * @brief Try to get a parsed option value without throwing.
+     * @tparam T Expected option value type.
+     * @param name Long option name without leading dashes.
+     * @return Pair containing the value and a success flag.
+     */
     template<typename T>
     std::pair<T, bool> get(const std::string &name) const
     {
@@ -879,11 +897,21 @@ public:
 #endif
 #endif
 
+    /**
+     * @brief Get arguments that were not parsed as options.
+     * @return Reference to the remaining positional arguments.
+     */
     const std::vector<std::string> &rest() const
     {
         return others_;
     }
 
+    /**
+     * @brief Parse a command line string.
+     * @param arg Command line text to tokenize and parse.
+     * @param with_program_name Whether the first token should be treated as the program name.
+     * @return true if parsing succeeds; false if parse errors were recorded.
+     */
     bool parse(const std::string &arg, bool with_program_name = true)
     {
         std::vector<std::string> args;
@@ -927,6 +955,12 @@ public:
         return parse(args, with_program_name);
     }
 
+    /**
+     * @brief Parse command line arguments from a string vector.
+     * @param args Argument vector.
+     * @param with_program_name Whether args[0] should be treated as the program name.
+     * @return true if parsing succeeds; false if parse errors were recorded.
+     */
     bool parse(const std::vector<std::string> &args, bool with_program_name = true)
     {
         int argc = static_cast<int>(args.size());
@@ -938,6 +972,13 @@ public:
         return parse(argc, argv.data(), with_program_name);
     }
 
+    /**
+     * @brief Parse command line arguments.
+     * @param argc Argument count.
+     * @param argv Argument array.
+     * @param with_program_name Whether argv[0] should be treated as the program name.
+     * @return true if parsing succeeds; false if parse errors were recorded.
+     */
     bool parse(int argc, const char *const argv[], bool with_program_name = true)
     {
         errors_.clear();
@@ -958,7 +999,7 @@ public:
             if (initial) {
                 if (lookup.count(initial) > 0) {
                     lookup[initial].clear();
-                    errors_.push_back(std::string("short option '") + initial + "' is ambiguous");
+                    errors_.push_back(std::string("short option -") + initial + " is ambiguous");
                     return false;
                 } else {
                     lookup[initial] = p.first;
@@ -1037,39 +1078,68 @@ public:
         return errors_.empty();
     }
 
-    void parse_check(const std::string &arg, bool with_program_name = true)
+    /**
+     * @brief Parse and validate a command line string.
+     * @param arg Command line text to tokenize and parse.
+     * @param with_program_name Whether the first token should be treated as the program name.
+     * @return true if parsing succeeds and execution should continue; false for help/version requests.
+     * @throws cmdline_error if parsing fails.
+     */
+    bool parse_check(const std::string &arg, bool with_program_name = true)
     {
         if (!options_.count("help"))
             flag("help", '?', "print this message");
         if (!options_.count("version"))
             flag("version", 'V', "show version");
-        check(with_program_name ? 0 : 1, parse(arg, with_program_name));
+        return check(parse(arg, with_program_name));
     }
 
-    void parse_check(const std::vector<std::string> &args, bool with_program_name = true)
+    /**
+     * @brief Parse and validate command line arguments from a string vector.
+     * @param args Argument vector.
+     * @param with_program_name Whether args[0] should be treated as the program name.
+     * @return true if parsing succeeds and execution should continue; false for help/version requests.
+     * @throws cmdline_error if parsing fails.
+     */
+    bool parse_check(const std::vector<std::string> &args, bool with_program_name = true)
     {
         if (!options_.count("help"))
             flag("help", '?', "print this message");
         if (!options_.count("version"))
             flag("version", 'V', "show version");
-        int argc = static_cast<int>(args.size());
-        check(with_program_name ? argc : argc + 1, parse(args, with_program_name));
+        return check(parse(args, with_program_name));
     }
 
-    void parse_check(int argc, char *argv[], bool with_program_name = true)
+    /**
+     * @brief Parse and validate command line arguments.
+     * @param argc Argument count.
+     * @param argv Argument array.
+     * @param with_program_name Whether argv[0] should be treated as the program name.
+     * @return true if parsing succeeds and execution should continue; false for help/version requests.
+     * @throws cmdline_error if parsing fails.
+     */
+    bool parse_check(int argc, char *argv[], bool with_program_name = true)
     {
         if (!options_.count("help"))
             flag("help", '?', "print this message");
         if (!options_.count("version"))
             flag("version", 'V', "show version");
-        check(with_program_name ? argc : argc + 1, parse(argc, argv, with_program_name));
+        return check(parse(argc, argv, with_program_name));
     }
 
+    /**
+     * @brief Get the first parse error message.
+     * @return First parse error, or an empty string when no error exists.
+     */
     std::string error() const
     {
         return errors_.size() > 0 ? errors_[0] : "";
     }
 
+    /**
+     * @brief Get all parse error messages.
+     * @return Newline-separated parse errors, or an empty string when no error exists.
+     */
     std::string error_full() const
     {
         std::ostringstream oss;
@@ -1078,14 +1148,27 @@ public:
         return oss.str();
     }
 
+    /**
+     * @brief Generate help text for the current parser state.
+     * @return Usage and options text.
+     */
     std::string help() const
     {
         std::ostringstream oss;
-        oss << "usage: " << prog_name_ << ' ' << usage();
+        oss << "Usage: " << prog_name_ << ' ' << usage();
         if (intro_ != "")
             oss << intro_ << "\n\n";
         usage(oss);
         return oss.str();
+    }
+
+    /**
+     * @brief Get the configured version string.
+     * @return Version text set by version(const char *).
+     */
+    std::string version() const
+    {
+        return version_;
     }
 
 protected:
@@ -1099,7 +1182,7 @@ protected:
         if (options_.empty())
             return;
 
-        oss << "options:\n";
+        oss << "Options:\n";
 
         size_t width = max_width();
         for (const auto &opt : ordered_) {
@@ -1126,30 +1209,34 @@ protected:
     }
 
 private:
-    void check(int argc, bool ok) const
+    bool check(bool ok) const
     {
-        try {
-            // 打印版本信息时，不打印错误信息
-            if (!version_.empty() && exist("version")) {
-                std::cerr << version_ << '\n';
-                std::exit(0);
-            }
-            // 直接输入 program_name 的情况：打印帮助信息
-            if ((argc == 1 && !ok) || exist("help")) {
-                std::cerr << help();
-                std::exit(0);
-            }
-            // 输入 program_name xxx 的情况：输出错误信息和帮助信息
-            if (!ok) {
-                std::cerr << error() << '\n'
-                          << help();
-                std::exit(1);
-            }
-        } catch (const std::exception &ex) {
-            std::cerr << ex.what() << '\n'
-                      << help();
-            std::exit(1);
+        // 打印版本信息时，不打印错误信息
+        if (!version_.empty() && option_is_set("version")) {
+            return false;
         }
+        // 显式输入 help 选项的情况：打印帮助信息
+        if (option_is_set("help")) {
+            return false;
+        }
+        // 输入 program_name xxx 的情况：输出错误信息和帮助信息
+        if (!ok) {
+            std::string msg = error_full();
+            if (msg.empty()) {
+                msg = error();
+            }
+            if (msg.empty()) {
+                msg = "invalid command line";
+            }
+            throw cmdline_error(msg);
+        }
+        return true;
+    }
+
+    bool option_is_set(const std::string &name) const
+    {
+        auto it = options_.find(name);
+        return it != options_.end() && it->second->has_set();
     }
 
     bool check_short_option(std::map<char, std::string> &lookup, char option)
@@ -1174,7 +1261,11 @@ private:
             return;
         }
         if (!it->second->set()) {
-            errors_.push_back("option needs value: --" + name);
+            std::string msg = "option needs value: --" + name;
+            if (!it->second->last_error().empty()) {
+                msg += " (" + it->second->last_error() + ")";
+            }
+            errors_.push_back(msg);
             return;
         }
     }
@@ -1187,7 +1278,11 @@ private:
             return;
         }
         if (!it->second->set(value)) {
-            errors_.push_back("option value is invalid: --" + name + "=" + value);
+            std::string msg = "option value is invalid: --" + name + "=" + value;
+            if (!it->second->last_error().empty()) {
+                msg += " (" + it->second->last_error() + ")";
+            }
+            errors_.push_back(msg);
             return;
         }
     }
@@ -1242,12 +1337,28 @@ private:
 
         virtual std::string short_description() const = 0;
 
+        const std::string &last_error() const
+        {
+            return error_;
+        }
+
     protected:
+        void clear_error()
+        {
+            error_.clear();
+        }
+
+        void set_error(const std::string &error)
+        {
+            error_ = error;
+        }
+
         const std::string nam_;
         const char snam_;
         class description desc_;
         // whether value has been set
         bool has_value_;
+        std::string error_;
     };
 
     // flags are options without value
@@ -1270,12 +1381,14 @@ private:
 
         bool set() override
         {
+            clear_error();
             has_value_ = true;
             return true;
         }
 
         bool set(const std::string &) override
         {
+            set_error("flag does not accept a value");
             return false;
         }
 
@@ -1338,6 +1451,7 @@ private:
 
         bool set() override
         {
+            this->set_error("option requires a value");
             return false;
         }
 
@@ -1347,7 +1461,9 @@ private:
                 actual_ = read(value);
                 has_value_ = true;
                 occurred_ = true;
+                this->clear_error();
             } catch (const std::exception &ex) {
+                this->set_error(ex.what());
                 std::cerr << ex.what() << '\n';
                 return false;
             }
@@ -1474,6 +1590,12 @@ public:
     // Here, passing a pointer also has an advantage that allows the callback function to use polymorphism.
     using callback_t = std::function<int(command *cmd)>;
 
+    /**
+     * @brief Construct a command with a callback.
+     * @param name Command name.
+     * @param desc Short command description used in help text.
+     * @param callback Function invoked when this command runs.
+     */
     command(const std::string &name, const std::string &desc, const callback_t &callback)
         : name_(name)
         , desc_(desc)
@@ -1487,6 +1609,13 @@ public:
     command &operator=(command &&other) noexcept = delete;
 
     // for root command
+    /**
+     * @brief Execute the root command with command line arguments.
+     * @param argc Argument count.
+     * @param argv Argument array.
+     * @return Callback return code, 0 for handled help/version requests.
+     * @throws cmdline_error if parsing fails or a command is undefined.
+     */
     int operator()(int argc, char *argv[])
     {
         bool has_cmd = true;
@@ -1498,19 +1627,26 @@ public:
             const std::string cmd_name = argv[1];
             auto it = subcommands_.find(cmd_name);
             if (it == subcommands_.end()) {
-                // throw cmdline_error("undefined command: " + cmd_name);
-                std::cerr << "undefined command: " << cmd_name << '\n';
-                retcode = 1;
+                throw cmdline_error("undefined command: " + cmd_name);
             } else {
                 retcode = it->second(prog_name_ + " " + cmd_name, argc - 2, argv + 2);
             }
         } else {
-            parse_check(argc, argv);
+            if (!parse_check(argc, argv)) {
+                print_help_or_version();
+                return 0;
+            }
             retcode = run();
         }
         return retcode;
     }
 
+    /**
+     * @brief Add a subcommand.
+     * @param cmd Subcommand to move into this command.
+     * @return Reference to this command for method chaining.
+     * @throws cmdline_error if a subcommand with the same name already exists.
+     */
     command &add(command &&cmd)
     {
         auto res = subcommands_.emplace(cmd.name_, std::move(cmd));
@@ -1520,11 +1656,19 @@ public:
         return *this;
     }
 
+    /**
+     * @brief Get the command name.
+     * @return Command name.
+     */
     const std::string &name() const
     {
         return name_;
     }
 
+    /**
+     * @brief Get the command description.
+     * @return Command description.
+     */
     const std::string &description() const
     {
         return desc_;
@@ -1543,7 +1687,7 @@ protected:
             for (const auto &cmd : ordered_) {
                 max_width = std::max(max_width, cmd->second.name().size());
             }
-            oss << "commands:\n";
+            oss << "Commands:\n";
             for (const auto &cmd : ordered_) {
                 oss << "  " << cmd->first << ' ';
                 for (size_t j = cmd->first.size(); j < max_width + 9; ++j)
@@ -1569,8 +1713,20 @@ private:
     int operator()(const std::string &cmd_name, int argc, char *argv[])
     {
         program_name(cmd_name);
-        parse_check(argc, argv, false);
+        if (!parse_check(argc, argv, false)) {
+            print_help_or_version();
+            return 0;
+        }
         return run();
+    }
+
+    void print_help_or_version() const
+    {
+        if (exist("version") && !version().empty()) {
+            std::cout << version() << std::endl;
+        } else {
+            std::cout << help();
+        }
     }
 
     int run()

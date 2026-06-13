@@ -19,13 +19,20 @@ int main(int argc, char *argv[])
     a.footer("other arguments");
     a.introduction("a getopt-like cli example");
 
-    // parse and check automatically
-    a.parse_check(argc, argv);
-
-    cout.setf(ios::boolalpha);
-    std::stringstream oss;
-#if CMDLINE_USE_EXCEPTIONS
+#ifdef CMDLINE_USE_EXCEPTIONS
     try {
+        // parse and check automatically
+        if (!a.parse_check(argc, argv)) {
+            if (a.exist("version")) {
+                cout << a.version() << endl;
+            } else {
+                cout << a.help();
+            }
+            return 0;
+        }
+
+        cout.setf(ios::boolalpha);
+        std::stringstream oss;
         cout << "host: " << a.exist("host") << endl
              << "port: " << a.exist("port") << endl
              << "type: " << a.exist("type") << endl
@@ -44,11 +51,31 @@ int main(int argc, char *argv[])
 
         if (a.exist("gzip"))
             cout << "gzip" << endl;
+    } catch (const cmdline::cmdline_error &ex) {
+        cerr << ex.what();
+        return 1;
     } catch (const std::exception &ex) {
         cout << ex.what() << endl;
         return 1;
     }
 #else
+    try {
+        // parse and check automatically
+        if (!a.parse_check(argc, argv)) {
+            if (a.exist("version")) {
+                cout << a.version() << endl;
+            } else {
+                cout << a.help();
+            }
+            return 0;
+        }
+    } catch (const cmdline::cmdline_error &ex) {
+        cerr << ex.what();
+        return 1;
+    }
+
+    cout.setf(ios::boolalpha);
+    std::stringstream oss;
     cout << "host: " << a.exist("host") << endl
          << "port: " << a.exist("port") << endl
          << "type: " << a.exist("type") << endl
@@ -59,6 +86,21 @@ int main(int argc, char *argv[])
     auto host = a.get<string>("host");
     auto port = a.get<int>("port");
     auto type = a.get<string>("type");
+#if __cplusplus >= 201703L
+    if (type && host && port) {
+        oss << *type << "://" << *host << ":" << *port;
+    }
+    cout << oss.str() << endl;
+
+    auto tell = a.get<string>("tell");
+    if (tell) {
+        cout << "tell: " << *tell << endl;
+    }
+    auto re = a.get<regex>("regex");
+    if (re) {
+        cout << "valid: " << std::regex_match(oss.str(), *re) << endl;
+    }
+#else
     if (type.second && host.second && port.second) {
         oss << type.first << "://" << host.first << ":" << port.first;
     }
@@ -72,6 +114,7 @@ int main(int argc, char *argv[])
     if (re.second) {
         cout << "valid: " << std::regex_match(oss.str(), re.first) << endl;
     }
+#endif
     if (a.exist("gzip"))
         cout << "gzip" << endl;
 #endif

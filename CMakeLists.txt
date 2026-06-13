@@ -11,19 +11,20 @@ elseif(CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
     add_compile_options(/W4)
 endif()
 
-option(CMDLINE_USE_EXCEPTIONS "Use exceptions" ON)
-
-option(BUILD_EXAMPLES "Build examples" ON)
+option(BUILD_EXAMPLES "Build examples" OFF)
+option(BUILD_TESTS "Build tests" OFF)
 
 add_library(cmdline INTERFACE cmdline.h)
 target_include_directories(cmdline INTERFACE
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
     $<INSTALL_INTERFACE:include>
 )
-if(CMDLINE_USE_EXCEPTIONS)
-    target_compile_definitions(cmdline INTERFACE CMDLINE_USE_EXCEPTIONS=1)
-endif()
 
 if(BUILD_EXAMPLES)
     add_subdirectory(examples)
+endif()
+
+if(BUILD_TESTS)
+    enable_testing()
+    add_subdirectory(tests)
 endif()
