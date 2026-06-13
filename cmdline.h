@@ -1,6 +1,7 @@
 #pragma once
 
 #include <algorithm>
+#include <cstdio>
 #include <cstring>
 #include <functional>
 #include <iostream>
@@ -20,13 +21,28 @@
 #include <cxxabi.h>
 #endif
 #include <cstdlib>
+#ifdef _WIN32
+#include <io.h>
+#include <windows.h>
+#else
+#include <unistd.h>
+#endif
 
 #ifdef max
 #undef max
 #endif
+#ifdef min
+#undef min
+#endif
 
 namespace cmdline
 {
+
+enum class terminal_style {
+    auto_detect,
+    always,
+    never,
+};
 
 class cmdline_error : public std::runtime_error
 {
@@ -468,7 +484,121 @@ inline
     static struct config
 {
     bool show_option_typename = true;
+    terminal_style style = terminal_style::auto_detect;
 } g_config;
+
+namespace detail
+{
+
+enum class style_code {
+    bold,
+    cyan,
+    green,
+    underline,
+};
+
+static inline bool env_is_set(const char *name)
+{
+#ifdef _WIN32
+    char *value = nullptr;
+    size_t size = 0;
+    if (_dupenv_s(&value, &size, name) != 0 || value == nullptr) {
+        return false;
+    }
+    std::string result(value);
+    free(value);
+    return !result.empty();
+#else
+    const char *value = std::getenv(name);
+    return value != nullptr && value[0] != '\0';
+#endif
+}
+
+static inline bool env_equals(const char *name, const char *expected)
+{
+#ifdef _WIN32
+    char *value = nullptr;
+    size_t size = 0;
+    if (_dupenv_s(&value, &size, name) != 0 || value == nullptr) {
+        return false;
+    }
+    std::string result(value);
+    free(value);
+    return result == expected;
+#else
+    const char *value = std::getenv(name);
+    return value != nullptr && std::strcmp(value, expected) == 0;
+#endif
+}
+
+static inline bool stdout_is_terminal()
+{
+#ifdef _WIN32
+    return _isatty(_fileno(stdout)) != 0;
+#else
+    return isatty(fileno(stdout)) != 0;
+#endif
+}
+
+static inline bool enable_windows_virtual_terminal()
+{
+#ifdef _WIN32
+    HANDLE handle = GetStdHandle(STD_OUTPUT_HANDLE);
+    if (handle == INVALID_HANDLE_VALUE || handle == nullptr) {
+        return false;
+    }
+    DWORD mode = 0;
+    if (!GetConsoleMode(handle, &mode)) {
+        return false;
+    }
+    if ((mode & ENABLE_VIRTUAL_TERMINAL_PROCESSING) != 0) {
+        return true;
+    }
+    return SetConsoleMode(handle, mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING) != 0;
+#else
+    return true;
+#endif
+}
+
+static inline bool terminal_supports_style()
+{
+    if (g_config.style == terminal_style::always) {
+        return true;
+    }
+    if (g_config.style == terminal_style::never) {
+        return false;
+    }
+    if (env_is_set("NO_COLOR") || env_equals("TERM", "dumb")) {
+        return false;
+    }
+    return stdout_is_terminal() && enable_windows_virtual_terminal();
+}
+
+static inline const char *style_sequence(style_code code)
+{
+    switch (code) {
+        case style_code::bold:
+            return "\033[1m";
+        case style_code::cyan:
+            return "\033[36m";
+        case style_code::green:
+            return "\033[32m";
+        case style_code::underline:
+            return "\033[4m";
+        default:
+            return "";
+    }
+}
+
+static inline std::string apply_style(const std::string &text, style_code code)
+{
+    if (!terminal_supports_style()) {
+        return text;
+    }
+    return std::string(style_sequence(code)) + text + "\033[0m";
+}
+
+} // namespace detail
 
 class parser
 {
@@ -1155,7 +1285,7 @@ public:
     std::string help() const
     {
         std::ostringstream oss;
-        oss << "Usage: " << prog_name_ << ' ' << usage();
+        oss << detail::apply_style("Usage:", detail::style_code::bold) << ' ' << prog_name_ << ' ' << usage();
         if (intro_ != "")
             oss << intro_ << "\n\n";
         usage(oss);
@@ -1182,17 +1312,20 @@ protected:
         if (options_.empty())
             return;
 
-        oss << "Options:\n";
+        oss << detail::apply_style("Options:", detail::style_code::bold) << '\n';
 
         size_t width = max_width();
         for (const auto &opt : ordered_) {
             if (opt->short_name()) {
-                oss << "  -" << opt->short_name() << ", ";
+                std::string short_name("-");
+                short_name.push_back(opt->short_name());
+                oss << "  " << detail::apply_style(short_name, detail::style_code::cyan) << ", ";
             } else {
                 oss << "      ";
             }
 
-            oss << "--" << opt->name();
+            const std::string long_name = "--" + opt->name();
+            oss << detail::apply_style(long_name, detail::style_code::cyan);
             for (size_t j = opt->name().size(); j < width + 4; j++)
                 oss << ' ';
             oss << opt->description(width + 12 + 2) << '\n';
@@ -1701,9 +1834,11 @@ protected:
             for (const auto &cmd : ordered_) {
                 max_width = std::max(max_width, cmd->second.name().size());
             }
-            oss << "Commands:\n";
+            oss << detail::apply_style("Commands:", detail::style_code::bold) << '\n';
             for (const auto &cmd : ordered_) {
-                oss << "  " << cmd->first << ' ';
+                const std::string command_name = detail::apply_style(
+                    detail::apply_style(cmd->first, detail::style_code::green), detail::style_code::underline);
+                oss << "  " << command_name << ' ';
                 for (size_t j = cmd->first.size(); j < max_width + 9; ++j)
                     oss << ' ';
                 oss << cmd->second.description(max_width + 12) << '\n';

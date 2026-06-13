@@ -16,6 +16,7 @@ This is a simple command line parser for C++.
 NOTE:
 - `parse_check()` throws `cmdline::cmdline_error` for invalid arguments instead of exiting the process. Help and version requests are not errors: `parse_check()` returns `false`, so callers can print `help()` or `version()` and return normally. Help is only printed when users explicitly pass `--help` or `-?`.
 - Define `CMDLINE_USE_EXCEPTIONS` to enable the exception-oriented `get<T>()` API. When it is not defined, `get<T>()` uses the non-exception return style for the selected C++ standard.
+- Help text uses simple ANSI styling by default when stdout is a capable terminal, including bold headings, colored options, and underlined subcommand names. Auto mode disables styling for `NO_COLOR`, `TERM=dumb`, and non-terminal output.
 - `cmdline::range()` is closed interval.
 - When you use `cmdline::regex()`, always remember to encapsulate the regex with `^` and `$`.
 - For options which are set multiple times, the latter will overwrite the former. eg:
@@ -45,6 +46,7 @@ localhost:80
 | `parser::version(text)` | Set the version string used by the automatically added `--version` / `-V` flag. |
 | `parser::version()` | Return the configured version string. |
 | `parser::program_name(name)` | Override the program name shown in help text. By default it is taken from `argv[0]`. |
+| `cmdline::g_config.style` | Controls terminal styling for generated help text. Defaults to `cmdline::terminal_style::auto_detect`; set to `always` to force ANSI output or `never` for plain text. |
 
 ### Defining Options
 

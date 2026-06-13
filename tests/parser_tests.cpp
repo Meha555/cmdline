@@ -149,6 +149,66 @@ SCENARIO("Parser preserves positional arguments", "[parser][bdd]")
     }
 }
 
+SCENARIO("Help text supports configurable terminal styling", "[parser][style]")
+{
+    struct StyleGuard {
+        cmdline::terminal_style previous_style;
+        ~StyleGuard()
+        {
+            cmdline::g_config.style = previous_style;
+        }
+    } guard{cmdline::g_config.style};
+
+    GIVEN("a parser with one option")
+    {
+        cmdline::parser parser;
+        parser.program_name("tool").option<std::string>("host", 'h', "host name", false);
+
+        WHEN("terminal styling is disabled")
+        {
+            cmdline::g_config.style = cmdline::terminal_style::never;
+            const std::string help = parser.help();
+
+            THEN("help remains plain text")
+            {
+                REQUIRE(help.find("\033[") == std::string::npos);
+                REQUIRE(help.find("Usage:") != std::string::npos);
+                REQUIRE(help.find("Options:") != std::string::npos);
+                REQUIRE(help.find("--host") != std::string::npos);
+            }
+        }
+
+        WHEN("terminal styling is forced")
+        {
+            cmdline::g_config.style = cmdline::terminal_style::always;
+            const std::string help = parser.help();
+
+            THEN("help contains ANSI style sequences and the original text")
+            {
+                REQUIRE(help.find("\033[") != std::string::npos);
+                REQUIRE(help.find("Usage:") != std::string::npos);
+                REQUIRE(help.find("Options:") != std::string::npos);
+                REQUIRE(help.find("--host") != std::string::npos);
+            }
+        }
+
+        WHEN("terminal styling is forced for command help")
+        {
+            cmdline::g_config.style = cmdline::terminal_style::always;
+            cmdline::command child("image", "image management", [](cmdline::command *) -> int { return 0; });
+            cmdline::command root("tool", "test tool", [](cmdline::command *) -> int { return 0; });
+            root.add(std::move(child));
+            const std::string help = root.help();
+
+            THEN("subcommand names are underlined")
+            {
+                REQUIRE(help.find("\033[4m") != std::string::npos);
+                REQUIRE(help.find("image") != std::string::npos);
+            }
+        }
+    }
+}
+
 SCENARIO("Command dispatches subcommands", "[command][bdd]")
 {
     GIVEN("a root command with one subcommand")
