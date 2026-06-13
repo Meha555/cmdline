@@ -37,7 +37,7 @@ int main(int argc, char *argv[])
         .introduction("image management");
 
     // container command
-    cmdline::command containerCmd("container", "container management", [](cmdline::command *cmd) -> int {
+    cmdline::command containerCmd("container", cmdline::description("container management", "List, enter, stop, remove containers."), [](cmdline::command *cmd) -> int {
         try {
             // allow combined options
             if (cmd->exist("ls")) {

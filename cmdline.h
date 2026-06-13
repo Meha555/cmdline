@@ -1593,10 +1593,24 @@ public:
     /**
      * @brief Construct a command with a callback.
      * @param name Command name.
-     * @param desc Short command description used in help text.
+     * @param desc Command description used in help text.
      * @param callback Function invoked when this command runs.
      */
     command(const std::string &name, const std::string &desc, const callback_t &callback)
+        : name_(name)
+        , desc_(desc)
+        , callback_(callback)
+    {
+        program_name(name);
+    }
+
+    /**
+     * @brief Construct a command with a callback.
+     * @param name Command name.
+     * @param desc Command description used in help text.
+     * @param callback Function invoked when this command runs.
+     */
+    command(const std::string &name, const class description &desc, const callback_t &callback)
         : name_(name)
         , desc_(desc)
         , callback_(callback)
@@ -1647,7 +1661,7 @@ public:
      * @return Reference to this command for method chaining.
      * @throws cmdline_error if a subcommand with the same name already exists.
      */
-    command &add(command &&cmd)
+    command &add(command cmd)
     {
         auto res = subcommands_.emplace(cmd.name_, std::move(cmd));
         if (!res.second)
@@ -1669,9 +1683,9 @@ public:
      * @brief Get the command description.
      * @return Command description.
      */
-    const std::string &description() const
+    std::string description(size_t indent = 0) const
     {
-        return desc_;
+        return desc_.dump(indent);
     }
 
 protected:
@@ -1692,7 +1706,7 @@ protected:
                 oss << "  " << cmd->first << ' ';
                 for (size_t j = cmd->first.size(); j < max_width + 9; ++j)
                     oss << ' ';
-                oss << cmd->second.description() << '\n';
+                oss << cmd->second.description(max_width + 12) << '\n';
             }
         }
 
@@ -1739,7 +1753,7 @@ private:
     }
 
     const std::string name_;
-    const std::string desc_;
+    const class description desc_;
     callback_t callback_;
 
     using command_map_t = std::map<std::string, command>;
