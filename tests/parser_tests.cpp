@@ -6,7 +6,8 @@
 #include <string>
 #include <vector>
 
-namespace {
+namespace
+{
 
 template<typename T>
 T RequireValue(const std::pair<T, bool> &value)
@@ -151,7 +152,8 @@ SCENARIO("Parser preserves positional arguments", "[parser][bdd]")
 
 SCENARIO("Help text supports configurable terminal styling", "[parser][style]")
 {
-    struct StyleGuard {
+    struct StyleGuard
+    {
         cmdline::terminal_style previous_style;
         ~StyleGuard()
         {
@@ -195,8 +197,12 @@ SCENARIO("Help text supports configurable terminal styling", "[parser][style]")
         WHEN("terminal styling is forced for command help")
         {
             cmdline::g_config.style = cmdline::terminal_style::always;
-            cmdline::command child("image", "image management", [](cmdline::command *) -> int { return 0; });
-            cmdline::command root("tool", "test tool", [](cmdline::command *) -> int { return 0; });
+            cmdline::command child("image", "image management", [](cmdline::command *) -> int {
+                return 0;
+            });
+            cmdline::command root("tool", "test tool", [](cmdline::command *) -> int {
+                return 0;
+            });
             root.add(std::move(child));
             const std::string help = root.help();
 
@@ -240,6 +246,84 @@ SCENARIO("Command dispatches subcommands", "[command][bdd]")
             {
                 REQUIRE(called);
                 REQUIRE(ret == 7);
+            }
+        }
+    }
+}
+
+SCENARIO("Command dispatches nested subcommands", "[command][bdd]")
+{
+    GIVEN("a three-level command path")
+    {
+        bool parent_called = false;
+        bool child_called = false;
+        cmdline::command child("remove", "remove an image", [&](cmdline::command *cmd) -> int {
+            child_called = true;
+            REQUIRE(cmd->exist("force"));
+            REQUIRE(cmd->rest().size() == 1);
+            REQUIRE(cmd->rest()[0] == "busybox");
+            return 9;
+        });
+        child.flag("force", 'f', "force removal");
+
+        cmdline::command parent("image", "image management", [&](cmdline::command *) -> int {
+            parent_called = true;
+            return 3;
+        });
+        parent.add(std::move(child));
+
+        cmdline::command root("tool", "test tool", [](cmdline::command *) -> int {
+            return 1;
+        });
+        root.add(std::move(parent));
+
+        WHEN("the deepest subcommand is invoked")
+        {
+            const auto args = Args({"tool", "image", "remove", "--force", "busybox"});
+            std::vector<char *> argv;
+            for (const auto &arg : args) {
+                argv.push_back(const_cast<char *>(arg.c_str()));
+            }
+
+            const int ret = root(static_cast<int>(argv.size()), argv.data());
+
+            THEN("only the deepest callback runs")
+            {
+                REQUIRE_FALSE(parent_called);
+                REQUIRE(child_called);
+                REQUIRE(ret == 9);
+            }
+        }
+    }
+}
+
+SCENARIO("Nested commands do not register version", "[command][bdd]")
+{
+    GIVEN("a command with one subcommand")
+    {
+        cmdline::command child("image", "image management", [](cmdline::command *cmd) -> int {
+            REQUIRE_FALSE(cmd->exist("version"));
+            REQUIRE(cmd->help().find("--version") == std::string::npos);
+            return 4;
+        });
+        cmdline::command root("tool", "test tool", [](cmdline::command *) -> int {
+            return 1;
+        });
+        root.version("1.2.3");
+        root.add(std::move(child));
+
+        WHEN("the subcommand requests version")
+        {
+            const auto args = Args({"tool", "image", "--version"});
+            std::vector<char *> argv;
+            for (const auto &arg : args) {
+                argv.push_back(const_cast<char *>(arg.c_str()));
+            }
+
+            THEN("the version flag is undefined")
+            {
+                REQUIRE_THROWS_WITH(root(static_cast<int>(argv.size()), argv.data()),
+                                    Catch::Matchers::ContainsSubstring("undefined option: --version"));
             }
         }
     }

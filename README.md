@@ -33,7 +33,7 @@ localhost:80
 | Interface | Description |
 | --- | --- |
 | `cmdline::parser` | getopt-like command line parser. Use it to define options, parse arguments, query values, and generate help text. |
-| `cmdline::command` | cobra-like command wrapper built on top of `parser`. Use it to build root commands and one-level subcommands. |
+| `cmdline::command` | cobra-like command wrapper built on top of `parser`. Use it to build root commands and nested subcommands. |
 | `cmdline::cmdline_error` | Exception type thrown for invalid command line input or invalid parser usage. |
 | `cmdline::description` | Option description with optional multi-line detail text for help output. |
 
@@ -98,7 +98,7 @@ localhost:80
 | Interface | Description |
 | --- | --- |
 | `cmdline::command(name, desc, callback)` | Create a command. The callback receives a pointer to the command after parsing. |
-| `command::add(subcommand)` | Add a subcommand. Subcommands are moved into the parent command. |
+| `command::add(subcommand)` | Add a subcommand. Subcommands are moved into the parent command. A subcommand can add its own subcommands, so command paths can be deeper than one level. |
 | `command::operator()(argc, argv)` | Parse and execute a root command. It returns the callback return code, or `0` for handled help/version requests. |
 | `command::name()` | Return the command name. |
 | `command::description()` | Return the command description. |
@@ -359,11 +359,11 @@ Options:
   -?, --help       print this message
 ```
 
-Note: Except rootCmd, other sub-commands should not have sub-sub-commands!
+Subcommands can themselves contain subcommands. Add the deeper command before moving its parent:
 
 ```cpp
-rootCmd.add(std::move(subCmd));
-subCmd.add(std::move(subSubCmd)); // NOT ALLOWED!!!
+imageCmd.add(std::move(imageLsCmd));
+rootCmd.add(std::move(imageCmd));
 ```
 
 ### Extra Options

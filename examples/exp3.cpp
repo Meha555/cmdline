@@ -4,39 +4,31 @@ using namespace std;
 
 int main(int argc, char *argv[])
 {
-    // image command
-    cmdline::command imageCmd("image", "image management", [](cmdline::command *cmd) -> int {
-        try {
-            // allow combined options
-            if (cmd->exist("ls")) {
-                cout << "list all images" << endl;
-            }
-            if (cmd->exist("introspect")) {
-#ifdef CMDLINE_USE_EXCEPTIONS
-                cout << "introspect image: " << cmd->get<string>("introspect") << endl;
-#else
-                auto image = cmd->get<string>("introspect");
-#if __cplusplus >= 201703L
-                if (image)
-                    cout << "introspect image: " << *image << endl;
-#else
-                if (image.second)
-                    cout << "introspect image: " << image.first << endl;
-#endif
-#endif
-            }
-            return 0;
-        } catch (const std::exception &ex) {
-            std::cerr << ex.what() << std::endl;
+    // image 用多级子命令：mydocker image ls / mydocker image rm <name>
+    cmdline::command imageLsCmd("ls", "list all images", [](cmdline::command *) -> int {
+        cout << "list all images" << endl;
+        return 0;
+    });
+
+    cmdline::command imageRmCmd("rm", "remove an image", [](cmdline::command *cmd) -> int {
+        if (cmd->rest().size() != 1) {
+            cerr << "image name required" << endl;
             return 1;
         }
+        cout << "remove image: " << cmd->rest()[0] << endl;
+        return 0;
     });
-    imageCmd
-        .flag("ls", 'l', "list all images")
-        .option_with_default<string>("introspect", 'i', "introspect an image", false, "")
-        .introduction("image management");
+    imageRmCmd.footer("<name>");
 
-    // container command
+    cmdline::command imageCmd("image", "image management", [](cmdline::command *) -> int {
+        // 这一层只负责继续分发 ls / rm，本身没有要执行的动作。
+        return 0;
+    });
+    imageCmd.introduction("image management");
+    imageCmd.add(std::move(imageLsCmd));
+    imageCmd.add(std::move(imageRmCmd));
+
+    // container 保持一级子命令，动作仍然用选项表达：mydocker container --ls
     cmdline::command containerCmd("container", cmdline::description("container management", "List, enter, stop, remove containers."), [](cmdline::command *cmd) -> int {
         try {
             // allow combined options

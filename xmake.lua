@@ -1,8 +1,9 @@
 set_project("cmdline")
 set_version("1.0.0")
-set_languages("cxx11")
+set_languages("cxx17")
 
 add_rules("mode.debug", "mode.release", "plugin.compile_commands.autoupdate", { outputdir = "build" })
+add_requires("catch2")
 
 option("exceptions")
     set_default(false)
@@ -30,21 +31,11 @@ target("cmdline")
         add_defines("CMDLINE_USE_EXCEPTIONS=1", {public = true})
     end
 
-target_end()
-
 if has_config("examples") then
-    for _, file in ipairs(os.files("examples/*.cpp")) do
-        local name = path.basename(file)
-        target(name)
-            set_kind("binary")
-            add_files(file)
-            add_deps("cmdline")
-    end
+    includes("examples")
 end
 
 if has_config("tests") then
-    add_requires("catch2")
-
     target("cmdline_tests")
         set_kind("binary")
         add_files("tests/parser_tests.cpp")

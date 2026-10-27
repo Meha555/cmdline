@@ -481,7 +481,7 @@ private:
 #if __cplusplus >= 201703L
 inline
 #endif
-    static struct config
+static struct config
 {
     bool show_option_typename = true;
     terminal_style style = terminal_style::auto_detect;
@@ -495,6 +495,7 @@ enum class style_code {
     cyan,
     green,
     underline,
+    none,
 };
 
 static inline bool env_is_set(const char *name)
@@ -577,16 +578,18 @@ static inline bool terminal_supports_style()
 static inline const char *style_sequence(style_code code)
 {
     switch (code) {
-        case style_code::bold:
-            return "\033[1m";
-        case style_code::cyan:
-            return "\033[36m";
-        case style_code::green:
-            return "\033[32m";
-        case style_code::underline:
-            return "\033[4m";
-        default:
-            return "";
+    case style_code::bold:
+        return "\033[1m";
+    case style_code::cyan:
+        return "\033[36m";
+    case style_code::green:
+        return "\033[32m";
+    case style_code::underline:
+        return "\033[4m";
+    case style_code::none:
+        return "\033[0m";
+    default:
+        return "";
     }
 }
 
@@ -595,7 +598,7 @@ static inline std::string apply_style(const std::string &text, style_code code)
     if (!terminal_supports_style()) {
         return text;
     }
-    return std::string(style_sequence(code)) + text + "\033[0m";
+    return std::string(style_sequence(code)) + text + style_sequence(style_code::none);
 }
 
 } // namespace detail
@@ -1219,7 +1222,7 @@ public:
     {
         if (!options_.count("help"))
             flag("help", '?', "print this message");
-        if (!options_.count("version"))
+        if (register_version_ && !options_.count("version"))
             flag("version", 'V', "show version");
         return check(parse(arg, with_program_name));
     }
@@ -1235,7 +1238,7 @@ public:
     {
         if (!options_.count("help"))
             flag("help", '?', "print this message");
-        if (!options_.count("version"))
+        if (register_version_ && !options_.count("version"))
             flag("version", 'V', "show version");
         return check(parse(args, with_program_name));
     }
@@ -1252,7 +1255,7 @@ public:
     {
         if (!options_.count("help"))
             flag("help", '?', "print this message");
-        if (!options_.count("version"))
+        if (register_version_ && !options_.count("version"))
             flag("version", 'V', "show version");
         return check(parse(argc, argv, with_program_name));
     }
@@ -1273,8 +1276,9 @@ public:
     std::string error_full() const
     {
         std::ostringstream oss;
-        for (size_t i = 0; i < errors_.size(); i++)
+        for (size_t i = 0; i < errors_.size(); i++) {
             oss << errors_[i] << '\n';
+        }
         return oss.str();
     }
 
@@ -1286,8 +1290,9 @@ public:
     {
         std::ostringstream oss;
         oss << detail::apply_style("Usage:", detail::style_code::bold) << ' ' << prog_name_ << ' ' << usage();
-        if (intro_ != "")
-            oss << intro_ << "\n\n";
+        if (intro_ != "") {
+            oss << "\n" << intro_ << "\n\n";
+        }
         usage(oss);
         return oss.str();
     }
@@ -1309,8 +1314,9 @@ protected:
 
     virtual void usage(std::ostringstream &oss) const
     {
-        if (options_.empty())
+        if (options_.empty()) {
             return;
+        }
 
         oss << detail::apply_style("Options:", detail::style_code::bold) << '\n';
 
@@ -1638,7 +1644,7 @@ private:
     protected:
         class description full_description(bool required, const T &default_value = T()) const
         {
-            const std::string typename_str = (g_config.show_option_typename ? detail::readable_typename<T>()  : "");
+            const std::string typename_str = (g_config.show_option_typename ? detail::readable_typename<T>() : "");
             const std::string required_str = (required ? "required" : "");
             const std::string default_value_str = (with_default_ ? "[=" + detail::default_value<T>(default_value) + "]" : "");
 
@@ -1699,6 +1705,8 @@ private:
 protected:
     // program name
     std::string prog_name_;
+    // only root command has '--version' option
+    bool register_version_ = true;
 
 private:
     // options_ store all options in <long_name, option_base *>
@@ -1765,27 +1773,7 @@ public:
      */
     int operator()(int argc, char *argv[])
     {
-        bool has_cmd = true;
-        if (argc < 2 || std::strncmp("-", argv[1], 1) == 0) {
-            has_cmd = false;
-        }
-        int retcode = 0;
-        if (has_cmd) {
-            const std::string cmd_name = argv[1];
-            auto it = subcommands_.find(cmd_name);
-            if (it == subcommands_.end()) {
-                throw cmdline_error("undefined command: " + cmd_name);
-            } else {
-                retcode = it->second(prog_name_ + " " + cmd_name, argc - 2, argv + 2);
-            }
-        } else {
-            if (!parse_check(argc, argv)) {
-                print_help_or_version();
-                return 0;
-            }
-            retcode = run();
-        }
-        return retcode;
+        return dispatch(argc, argv, true);
     }
 
     /**
@@ -1814,6 +1802,7 @@ public:
 
     /**
      * @brief Get the command description.
+     * @note If it is root command, then it's description will not be shown. Use introduction instead.
      * @return Command description.
      */
     std::string description(size_t indent = 0) const
@@ -1858,13 +1847,27 @@ protected:
     }
 
 private:
-    // for sub commands
-    int operator()(const std::string &cmd_name, int argc, char *argv[])
+    int dispatch(int argc, char *argv[], bool with_program_name)
     {
-        program_name(cmd_name);
-        if (!parse_check(argc, argv, false)) {
-            print_help_or_version();
-            return 0;
+        if (argc > 0) {
+            if (!with_program_name) {
+                register_version_ = false;
+            }
+            const int first = with_program_name ? 1 : 0;
+            if (!subcommands_.empty() && first < argc && std::strncmp("-", argv[first], 1) != 0) {
+                // 'first' is a sub command
+                const std::string cmd_name = argv[first];
+                auto it = subcommands_.find(cmd_name);
+                if (it == subcommands_.end())
+                    throw cmdline_error("undefined command: " + cmd_name);
+                it->second.program_name(prog_name_ + " " + cmd_name);
+                return it->second.dispatch(argc - first - 1, argv + first + 1, false);
+            }
+            // else 'first' is options
+            if (!parse_check(argc, argv, with_program_name)) {
+                print_help_or_version();
+                return 0;
+            }
         }
         return run();
     }
@@ -1881,9 +1884,9 @@ private:
     int run()
     {
         int retcode = 0;
-        // prev hooks
+        // TODO: prev hooks, like cobra
         retcode = callback_(this);
-        // post hooks
+        // TODO: post hooks, like cobra
         return retcode;
     }
 
