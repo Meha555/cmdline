@@ -2,7 +2,7 @@
 
 using namespace std;
 
-int main(int argc, char *argv[])
+int main(int argc, const char *argv[])
 {
     cmdline::parser a;
     a.option_with_default<string>("host", 'h', cmdline::description("host name", R"(example:

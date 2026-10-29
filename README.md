@@ -122,7 +122,7 @@ This is an example of simple usage.
 
 using namespace std;
 
-int main(int argc, char *argv[])
+int main(int argc, const char *argv[])
 {
     // global config
     cmdline::g_config.show_option_typename = true;
@@ -248,7 +248,7 @@ Options:
 
 using namespace std;
 
-int main(int argc, char *argv[])
+int main(int argc, const char *argv[])
 {
     // create a sub-command
     cmdline::command subCmd("action", "sub-command action", [](cmdline::command *cmd) -> int {

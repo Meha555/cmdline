@@ -235,9 +235,9 @@ SCENARIO("Command dispatches subcommands", "[command][bdd]")
         WHEN("the subcommand is invoked")
         {
             const auto args = Args({"tool", "image", "--ls"});
-            std::vector<char *> argv;
+            std::vector<const char *> argv;
             for (const auto &arg : args) {
-                argv.push_back(const_cast<char *>(arg.c_str()));
+                argv.push_back(arg.c_str());
             }
 
             const int ret = root(static_cast<int>(argv.size()), argv.data());
@@ -280,9 +280,9 @@ SCENARIO("Command dispatches nested subcommands", "[command][bdd]")
         WHEN("the deepest subcommand is invoked")
         {
             const auto args = Args({"tool", "image", "remove", "--force", "busybox"});
-            std::vector<char *> argv;
+            std::vector<const char *> argv;
             for (const auto &arg : args) {
-                argv.push_back(const_cast<char *>(arg.c_str()));
+                argv.push_back(arg.c_str());
             }
 
             const int ret = root(static_cast<int>(argv.size()), argv.data());
@@ -315,9 +315,9 @@ SCENARIO("Nested commands do not register version", "[command][bdd]")
         WHEN("the subcommand requests version")
         {
             const auto args = Args({"tool", "image", "--version"});
-            std::vector<char *> argv;
+            std::vector<const char *> argv;
             for (const auto &arg : args) {
-                argv.push_back(const_cast<char *>(arg.c_str()));
+                argv.push_back(arg.c_str());
             }
 
             THEN("the version flag is undefined")

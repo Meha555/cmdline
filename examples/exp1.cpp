@@ -4,7 +4,7 @@
 
 using namespace std;
 
-int main(int argc, char *argv[])
+int main(int argc, const char *argv[])
 {
     // global config
     cmdline::g_config.show_option_typename = false;

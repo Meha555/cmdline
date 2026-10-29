@@ -1251,7 +1251,7 @@ public:
      * @return true if parsing succeeds and execution should continue; false for help/version requests.
      * @throws cmdline_error if parsing fails.
      */
-    bool parse_check(int argc, char *argv[], bool with_program_name = true)
+    bool parse_check(int argc, const char *argv[], bool with_program_name = true)
     {
         if (!options_.count("help"))
             flag("help", '?', "print this message");
@@ -1771,7 +1771,7 @@ public:
      * @return Callback return code, 0 for handled help/version requests.
      * @throws cmdline_error if parsing fails or a command is undefined.
      */
-    int operator()(int argc, char *argv[])
+    int operator()(int argc, const char *argv[])
     {
         return dispatch(argc, argv, true);
     }
@@ -1847,7 +1847,7 @@ protected:
     }
 
 private:
-    int dispatch(int argc, char *argv[], bool with_program_name)
+    int dispatch(int argc, const char *argv[], bool with_program_name)
     {
         if (argc > 0) {
             if (!with_program_name) {
