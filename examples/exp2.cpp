@@ -8,9 +8,9 @@ int main(int argc, const char *argv[])
     a.option_with_default<string>("host", 'h', cmdline::description("host name", R"(example:
   --host=localhost
   -h 127.0.0.1)"),
-                                  true, "")
-        .option_with_default<int>("port", 'p', "port number", false, 80, cmdline::range(1, 65535))
-        .option_with_default<string>("type", 't', "protocol type", false, "http",
+                                  true, true, "")
+        .option_with_default<int>("port", 'p', "port number", false, true, 80, cmdline::range(1, 65535))
+        .option_with_default<string>("type", 't', "protocol type", false, true, "http",
                                      cmdline::oneof<string>("http", "https", "ssh", "ftp"))
         .flag("help", 0, "print this message")
         .footer("filename ...")

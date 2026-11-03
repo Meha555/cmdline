@@ -10,11 +10,11 @@ int main(int argc, const char *argv[])
     cmdline::g_config.show_option_typename = false;
 
     cmdline::parser a;
-    a.option_with_default<string>("host", 'h', cmdline::description("host name", "example:\n  --host=localhost\n  -h 127.0.0.1"), true, "");
-    a.option<int>("port", 'p', "port number", false, cmdline::range(1, 65535));
-    a.option<string>("type", 't', "protocol type", false, cmdline::oneof<string>("http", "https", "ssh", "ftp"));
-    a.option<string>("tell", 0, "telephone number", false, cmdline::regex<string>(R"(^1[3-9]\d{9}$)"));
-    a.option_with_default<regex>("regex", 'r', "regular expression", false, regex(R"(^(http|https|ssh|ftp)://((?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}|(?:\d{1,3}\.){3}\d{1,3})(?::([1-9]\d{0,4}|[1-5]\d{4}|6[0-4]\d{3}|65[0-4]\d{2}|655[0-2]\d|6553[0-5]))?$)"));
+    a.option_with_default<string>("host", 'h', cmdline::description("host name", "example:\n  --host=localhost\n  -h 127.0.0.1"), true, true, "");
+    a.option<int>("port", 'p', "port number", false, true, cmdline::range(1, 65535));
+    a.option<string>("type", 't', "protocol type", false, true, cmdline::oneof<string>("http", "https", "ssh", "ftp"));
+    a.option<string>("tell", 0, "telephone number", false, true, cmdline::regex<string>(R"(^1[3-9]\d{9}$)"));
+    a.option_with_default<regex>("regex", 'r', "regular expression", false, true, regex(R"(^(http|https|ssh|ftp)://((?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}|(?:\d{1,3}\.){3}\d{1,3})(?::([1-9]\d{0,4}|[1-5]\d{4}|6[0-4]\d{3}|65[0-4]\d{2}|655[0-2]\d|6553[0-5]))?$)"));
     a.flag("gzip", '\0', "gzip when transfer");
     a.footer("other arguments");
     a.introduction("a getopt-like cli example");

@@ -15,16 +15,11 @@ This is a simple command line parser for C++.
 
 NOTE:
 - `parse_check()` throws `cmdline::cmdline_error` for invalid arguments instead of exiting the process. Help and version requests are not errors: `parse_check()` returns `false`, so callers can print `help()` or `version()` and return normally. Help is only printed when users explicitly pass `--help` or `-?`.
-- Define `CMDLINE_USE_EXCEPTIONS` to enable the exception-oriented `get<T>()` API. When it is not defined, `get<T>()` uses the non-exception return style for the selected C++ standard.
+- Define `CMDLINE_USE_EXCEPTIONS` to enable the exception-oriented `get<T>()` and `get_all<T>()` APIs. Otherwise, both APIs use the non-exception return style for the selected C++ standard.
 - Help text uses simple ANSI styling by default when stdout is a capable terminal, including bold headings, colored options, and underlined subcommand names. Auto mode disables styling for `NO_COLOR`, `TERM=dumb`, and non-terminal output.
 - `cmdline::range()` is closed interval.
 - When you use `cmdline::regex()`, always remember to encapsulate the regex with `^` and `$`.
-- For options which are set multiple times, the latter will overwrite the former. eg:
-
-```bash
-$ ./test -h 127.0.0.1 --host=localhost
-localhost:80
-```
+- `unique=true`（默认）只允许选项显式出现一次；第二次出现解析失败，保留第一次值。`unique=false` 按出现顺序保留全部有效值，包括重复值，`get<T>()` 返回最后一个值，`get_all<T>()` 返回全部值。布尔 flag 的行为不变。
 
 ## API Reference
 
@@ -53,10 +48,16 @@ localhost:80
 | Interface | Description |
 | --- | --- |
 | `parser::flag(name, short_name, desc)` | Define a boolean flag that does not take a value. |
-| `parser::option<T>(name, short_name, desc, required)` | Define an option with a value of type `T`. |
-| `parser::option<T>(name, short_name, desc, required, default_value)` | Define an option with a default value. |
-| `parser::option<T>(name, short_name, desc, required, reader)` | Define an option with a custom reader or constraint. |
-| `parser::option_with_default<T>(...)` | Define an option and explicitly provide a default value. |
+| `parser::option<T>(name, short_name, desc, required, unique)` | 定义无默认值的选项；`required` 和 `unique` 默认均为 `true`。 |
+| `parser::option<T>(name, short_name, desc, required, unique, reader)` | 定义使用自定义 reader 或约束的选项，每次输入都会验证。 |
+| `parser::option_with_default<T>(name, short_name, desc, required, unique, default_value)` | 定义带默认值的选项，默认值位于 `unique` 之后。 |
+| `parser::option_with_default<T>(name, short_name, desc, required, unique, default_value, reader)` | 定义带默认值和自定义 reader 或约束的选项。 |
+
+参数顺序为名称、短名称（`'\0'` 表示无短名称）、描述、`required`、`unique`，之后是默认值或 reader。使用 `option_with_default<T>()` 注册带默认值的选项。
+
+- `required=true` 始终要求显式输入，默认值不能满足必填要求。
+- `unique=false` 且未显式输入时：无默认值则 `get_all<T>()` 返回可用的空列表，`get<T>()` 不可用；有默认值则列表包含一个默认值，标量返回该默认值。
+- 第一次有效的显式输入替换默认值，之后的有效输入依次追加；reader 验证失败的值不会加入列表。
 
 ### Parsing
 
@@ -75,7 +76,44 @@ localhost:80
 | `parser::get<T>(name)` with `CMDLINE_USE_EXCEPTIONS` | Return the parsed value by const reference. Throws `cmdline_error` if the option is missing, has a different type, or has no value. |
 | `parser::get<T>(name)` without `CMDLINE_USE_EXCEPTIONS` on C++17+ | Return `std::optional<T>`. Empty optional means the value is unavailable. |
 | `parser::get<T>(name)` without `CMDLINE_USE_EXCEPTIONS` on C++11/14 | Return `std::pair<T, bool>`. The boolean indicates whether the value is available. |
+| `parser::get_all<T>(name)` with `CMDLINE_USE_EXCEPTIONS` | 返回 `const std::vector<T>&`；名称不存在、元素类型错误或 `unique=true` 时抛出 `cmdline_error`。 |
+| `parser::get_all<T>(name)` without `CMDLINE_USE_EXCEPTIONS` on C++17+ | 返回 `std::optional<std::vector<T>>`；上述错误返回空 optional。 |
+| `parser::get_all<T>(name)` without `CMDLINE_USE_EXCEPTIONS` on C++11/14 | 返回 `std::pair<std::vector<T>, bool>`；上述错误返回 `second == false`。 |
 | `parser::rest()` | Return positional arguments that were not parsed as options. |
+
+`get<T>()` 保持标量接口，对于 `unique=false` 返回最后一次有效输入。`get_all<T>()` 适用于 `unique=false`，其中 `T` 是单个元素类型，例如 `std::string`。可用的空列表通过包含空 vector 的 optional 或 `second == true` 的 pair 表示。
+
+### 可重复选项
+
+下面的片段放在包含 `cmdline.h` 之后，可在三种查询模式下使用。`T` 是元素类型，`unique=false` 保留重复值；`parse_check()` 的异常处理方式与下方完整示例相同。
+
+```cpp
+cmdline::parser tags;
+tags.option<std::string>("tag", 't', "repeatable tag", false, false);
+// 命令行 --tag red -t blue --tag red 得到 red、blue、red。
+if (tags.parse_check(argc, argv)) {
+#ifdef CMDLINE_USE_EXCEPTIONS
+    const auto &values = tags.get_all<std::string>("tag");
+    for (const auto &value : values)
+        std::cout << value << '\n';
+#else
+    auto values = tags.get_all<std::string>("tag");
+#if __cplusplus >= 201703L
+    if (values) {
+        for (const auto &value : *values)
+            std::cout << value << '\n';
+    }
+#else
+    if (values.second) {
+        for (const auto &value : values.first)
+            std::cout << value << '\n';
+    }
+#endif
+#endif
+}
+```
+
+未输入 `--tag` 时，上例查询仍然可用，只是列表为空。若改为 `option_with_default<std::string>("tag", 't', "repeatable tag", false, false, "default")`，未输入时列表为 `{"default"}`，上述三次显式输入则替换默认值并得到 `{"red", "blue", "red"}`。完整的 `examples/exp0.cpp` 提供相同的可重复标签选项，例如 `exp0 --port 80 --tag red -t blue --tag red`。
 
 ### Errors And Help Text
 
@@ -107,7 +145,7 @@ localhost:80
 
 | Macro | Description |
 | --- | --- |
-| `CMDLINE_USE_EXCEPTIONS` | Enables exception-oriented `get<T>()` behavior. When not defined, `get<T>()` returns `std::optional<T>` on C++17+ or `std::pair<T, bool>` on C++11/14. |
+| `CMDLINE_USE_EXCEPTIONS` | 启用异常式查询：`get<T>()` 返回 `const T&`，`get_all<T>()` 返回 `const std::vector<T>&`。未定义时，C++17+ 返回 optional，C++11/14 返回带可用性标记的 pair，具体见查询 API 表。 |
 
 ## Sample
 
@@ -116,6 +154,8 @@ Here show sample usages of cmdline.
 ### Normal usage
 
 This is an example of simple usage.
+
+以下 Normal usage 和 Advance usage 代码使用异常式查询，请在包含 `cmdline.h` 前定义 `CMDLINE_USE_EXCEPTIONS`；实际的 `examples/exp0.cpp` 至 `exp3.cpp` 同时支持宏开关和 C++11/17。
 
 ```cpp
 #include "cmdline.h"
@@ -132,25 +172,26 @@ int main(int argc, const char *argv[])
     a.version("1.0.0").introduction("a getopt-like cli example");
 
     // add specified type of variable.
-    // 1st argument is long name
-    // 2nd argument is short name (no short name if '\0' specified)
-    // 3rd argument is description
-    // 4th argument is mandatory (optional. default is false)
-    // 5th argument is default value  (optional. it used when mandatory is false)
-    a.option_with_default<string>("host", 'h', "host name", true, "");
+    // 第 1 个参数是长名称。
+    // 第 2 个参数是短名称（'\0' 表示无短名称）。
+    // 第 3 个参数是描述。
+    // 第 4 个参数 required 表示是否要求显式输入，默认为 true。
+    // 第 5 个参数 unique 表示是否只允许出现一次，默认为 true。
+    // option_with_default 的第 6 个参数是默认值，不替代必填要求。
+    a.option_with_default<string>("host", 'h', "host name", true, true, "");
 
-    // 6th argument is extra constraint.
+    // 第 7 个参数是额外约束。
     // Here, port number must be 1 to 65535 by cmdline::range().
-    a.option_with_default<int>("port", 'p', "port number", false, 80, cmdline::range(1, 65535));
+    a.option_with_default<int>("port", 'p', "port number", false, true, 80, cmdline::range(1, 65535));
 
     // cmdline::oneof() can restrict options.
-    a.option<string>("type", 't', "protocol type", false, cmdline::oneof<string>("http", "https", "ssh", "ftp"));
+    a.option<string>("type", 't', "protocol type", false, true, cmdline::oneof<string>("http", "https", "ssh", "ftp"));
 
     // cmdline::regex() can restrict values by regular expression.
-    a.option<string>("tell", 0, "telephone number", false, cmdline::regex<string>(R"(^1[3-9]\d{9}$)"));
+    a.option<string>("tell", 0, "telephone number", false, true, cmdline::regex<string>(R"(^1[3-9]\d{9}$)"));
 
     // Boolean flags also can be defined.
-    // Call add method without a type parameter.
+    // 使用 flag 方法定义不带值的布尔开关。
     a.flag("gzip", '\0', "gzip when transfer");
 
     try {
@@ -269,8 +310,8 @@ int main(int argc, const char *argv[])
         }
     });
     subCmd
-        .option<string>("host", 'h', cmdline::description("host name", "example:\n  --host=localhost\n  -h 127.0.0.1"), true, "")
-        .option<int>("port", 'p', "port number", false, 80, cmdline::range(1, 65535))
+        .option_with_default<string>("host", 'h', cmdline::description("host name", "example:\n  --host=localhost\n  -h 127.0.0.1"), true, true, "")
+        .option_with_default<int>("port", 'p', "port number", false, true, 80, cmdline::range(1, 65535))
         .flag("gzip", '\0', "gzip when transfer")
         .footer("this is footer for sub-command")
         .introduction("this is introduction for sub-command");
@@ -290,7 +331,7 @@ int main(int argc, const char *argv[])
         }
     });
     rootCmd
-        .option<string>("type", 't', "protocol type", false, "http", cmdline::oneof<string>("http", "https", "ssh", "ftp"))
+        .option_with_default<string>("type", 't', "protocol type", false, true, "http", cmdline::oneof<string>("http", "https", "ssh", "ftp"))
         .flag("version", 'v', "version number")
         .footer("this is footer for root command")
         .introduction("this is introduction for root command");

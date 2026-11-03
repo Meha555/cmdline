@@ -10,13 +10,19 @@ namespace
 {
 
 template<typename T>
+const T &RequireValue(const T &value)
+{
+    return value;
+}
+
+template<typename T>
 T RequireValue(const std::pair<T, bool> &value)
 {
     REQUIRE(value.second);
     return value.first;
 }
 
-#if __cplusplus >= 201703L
+#if !defined(CMDLINE_USE_EXCEPTIONS) && __cplusplus >= 201703L
 template<typename T>
 T RequireValue(const std::optional<T> &value)
 {
@@ -37,9 +43,9 @@ SCENARIO("Parser accepts valid getopt-like options", "[parser][bdd]")
     GIVEN("a parser with required and optional options")
     {
         cmdline::parser parser;
-        parser.option<std::string>("host", 'h', "host name", true)
-            .option_with_default<int>("port", 'p', "port number", false, 80, cmdline::range(1, 65535))
-            .option_with_default<std::string>("type", 't', "protocol type", false, "http",
+        parser.option<std::string>("host", 'h', "host name", true, true)
+            .option_with_default<int>("port", 'p', "port number", false, true, 80, cmdline::range(1, 65535))
+            .option_with_default<std::string>("type", 't', "protocol type", false, true, "http",
                                               cmdline::oneof<std::string>("http", "https"))
             .flag("gzip", 'g', "gzip when transfer");
 
@@ -68,7 +74,7 @@ SCENARIO("Parser handles help and version as normal control flow", "[parser][bdd
     {
         cmdline::parser parser;
         parser.version("1.2.3");
-        parser.option<std::string>("host", 'h', "host name", false);
+        parser.option<std::string>("host", 'h', "host name", false, true);
 
         WHEN("help is requested")
         {
@@ -101,9 +107,9 @@ SCENARIO("Parser reports invalid arguments", "[parser][bdd]")
     GIVEN("a parser with constrained options")
     {
         cmdline::parser parser;
-        parser.option<std::string>("host", 'h', "host name", true)
-            .option_with_default<int>("port", 'p', "port number", false, 80, cmdline::range(1, 65535))
-            .option<std::string>("type", 't', "protocol type", false,
+        parser.option<std::string>("host", 'h', "host name", true, true)
+            .option_with_default<int>("port", 'p', "port number", false, true, 80, cmdline::range(1, 65535))
+            .option<std::string>("type", 't', "protocol type", false, true,
                                  cmdline::oneof<std::string>("http", "https"));
 
         WHEN("required options are missing")
@@ -133,7 +139,7 @@ SCENARIO("Parser preserves positional arguments", "[parser][bdd]")
     GIVEN("a parser with one named option")
     {
         cmdline::parser parser;
-        parser.option<std::string>("host", 'h', "host name", false);
+        parser.option<std::string>("host", 'h', "host name", false, true);
 
         WHEN("arguments include positional values")
         {
@@ -164,7 +170,7 @@ SCENARIO("Help text supports configurable terminal styling", "[parser][style]")
     GIVEN("a parser with one option")
     {
         cmdline::parser parser;
-        parser.program_name("tool").option<std::string>("host", 'h', "host name", false);
+        parser.program_name("tool").option<std::string>("host", 'h', "host name", false, true);
 
         WHEN("terminal styling is disabled")
         {
@@ -327,4 +333,166 @@ SCENARIO("Nested commands do not register version", "[command][bdd]")
             }
         }
     }
+}
+
+TEST_CASE("Unique options preserve the first explicit value", "[parser][unique]")
+{
+    cmdline::parser parser;
+    parser.option<int>("number", 'n', "number", false, true);
+
+    SECTION("A single occurrence succeeds")
+    {
+        REQUIRE(parser.parse(Args({"tool", "--number=4"})));
+        REQUIRE(RequireValue(parser.get<int>("number")) == 4);
+    }
+    SECTION("Short and long aliases share the uniqueness constraint")
+    {
+        REQUIRE_FALSE(parser.parse(Args({"tool", "-n", "4", "--number=5"})));
+        REQUIRE(RequireValue(parser.get<int>("number")) == 4);
+    }
+    SECTION("A long option followed by its short alias also fails")
+    {
+        REQUIRE_FALSE(parser.parse(Args({"tool", "--number=4", "-n", "5"})));
+        REQUIRE(RequireValue(parser.get<int>("number")) == 4);
+    }
+}
+
+TEST_CASE("Repeatable options preserve all values in input order", "[parser][unique]")
+{
+    cmdline::parser parser;
+    parser.option<int>("number", 'n', "number", false, false);
+    REQUIRE(parser.parse(Args({"tool", "--number=4", "--number", "4", "-n", "7"})));
+    REQUIRE(RequireValue(parser.get_all<int>("number")) == std::vector<int>{4, 4, 7});
+    REQUIRE(RequireValue(parser.get<int>("number")) == 7);
+}
+
+TEST_CASE("Repeatable options distinguish defaults from explicit input", "[parser][unique]")
+{
+    cmdline::parser parser;
+    SECTION("An absent option without a default returns an available empty list")
+    {
+        parser.option<int>("number", 'n', "number", false, false);
+        REQUIRE(parser.parse(Args({"tool"})));
+        REQUIRE(RequireValue(parser.get_all<int>("number")).empty());
+        REQUIRE_FALSE(parser.exist("number"));
+    }
+    SECTION("An absent option returns its default as a single-element list")
+    {
+        parser.option_with_default<int>("number", 'n', "number", false, false, 8);
+        REQUIRE(parser.parse(Args({"tool"})));
+        REQUIRE(RequireValue(parser.get_all<int>("number")) == std::vector<int>{8});
+        REQUIRE(RequireValue(parser.get<int>("number")) == 8);
+        REQUIRE_FALSE(parser.exist("number"));
+    }
+    SECTION("The first explicit value replaces the default and later values append")
+    {
+        parser.option_with_default<int>("number", 'n', "number", false, false, 8);
+        REQUIRE(parser.parse(Args({"tool", "-n", "2", "--number=3"})));
+        REQUIRE(RequireValue(parser.get_all<int>("number")) == std::vector<int>{2, 3});
+        REQUIRE(RequireValue(parser.get<int>("number")) == 3);
+    }
+    SECTION("A default alone does not satisfy a required option")
+    {
+        parser.option_with_default<int>("number", 'n', "number", true, false, 8);
+        REQUIRE_FALSE(parser.parse(Args({"tool"})));
+        REQUIRE(RequireValue(parser.get_all<int>("number")) == std::vector<int>{8});
+        REQUIRE_FALSE(parser.exist("number"));
+    }
+    SECTION("Repeated explicit values satisfy a required option")
+    {
+        parser.option<int>("number", 'n', "number", true, false);
+        REQUIRE(parser.parse(Args({"tool", "-n", "2", "-n", "3"})));
+        REQUIRE(RequireValue(parser.get_all<int>("number")) == std::vector<int>{2, 3});
+        REQUIRE(parser.exist("number"));
+    }
+}
+
+TEST_CASE("Repeatable options validate each value and discard invalid input", "[parser][unique]")
+{
+    cmdline::parser parser;
+    SECTION("The range reader rejects an intermediate value and accepts later values")
+    {
+        parser.option<int>("number", 'n', "number", false, false, cmdline::range(1, 5));
+        REQUIRE_FALSE(parser.parse(Args({"tool", "-n", "2", "-n", "9", "-n", "3"})));
+        REQUIRE(RequireValue(parser.get_all<int>("number")) == std::vector<int>{2, 3});
+        REQUIRE(RequireValue(parser.get<int>("number")) == 3);
+    }
+    SECTION("The oneof reader rejects a later invalid value")
+    {
+        parser.option<std::string>("type", 't', "type", false, false,
+                                   cmdline::oneof<std::string>("http", "https"));
+        REQUIRE_FALSE(parser.parse(Args({"tool", "--type=http", "--type=https", "--type=ftp"})));
+        REQUIRE(RequireValue(parser.get_all<std::string>("type")) == std::vector<std::string>{"http", "https"});
+        REQUIRE(RequireValue(parser.get<std::string>("type")) == "https");
+    }
+    SECTION("A default reader conversion failure preserves existing values")
+    {
+        parser.option<int>("number", 'n', "number", false, false);
+        REQUIRE_FALSE(parser.parse(Args({"tool", "-n", "2", "-n", "invalid"})));
+        REQUIRE(RequireValue(parser.get_all<int>("number")) == std::vector<int>{2});
+        REQUIRE(RequireValue(parser.get<int>("number")) == 2);
+    }
+    SECTION("The regex reader rejects a later nonmatching value")
+    {
+        parser.option<std::string>("name", 'n', "name", false, false,
+                                   cmdline::regex<std::string>("[a-z]+"));
+        REQUIRE_FALSE(parser.parse(Args({"tool", "-n", "one", "-n", "123", "-n", "two"})));
+        REQUIRE(RequireValue(parser.get_all<std::string>("name")) == std::vector<std::string>{"one", "two"});
+    }
+    SECTION("An invalid first value preserves the default")
+    {
+        parser.option_with_default<int>("number", 'n', "number", false, false, 3, cmdline::range(1, 5));
+        REQUIRE_FALSE(parser.parse(Args({"tool", "-n", "9"})));
+        REQUIRE(RequireValue(parser.get_all<int>("number")) == std::vector<int>{3});
+        REQUIRE_FALSE(parser.exist("number"));
+    }
+}
+
+TEST_CASE("get_all rejects invalid names types and unique options", "[parser][unique]")
+{
+    cmdline::parser parser;
+    parser.option<int>("number", 'n', "number", false, false)
+        .option<int>("single", 's', "single", false, true)
+        .flag("verbose", 'v', "verbose");
+    REQUIRE(parser.parse(Args({"tool", "-n", "2", "-s", "3"})));
+
+#ifdef CMDLINE_USE_EXCEPTIONS
+    REQUIRE_THROWS_AS(parser.get_all<int>("missing"), cmdline::cmdline_error);
+    REQUIRE_THROWS_AS(parser.get_all<std::string>("number"), cmdline::cmdline_error);
+    REQUIRE_THROWS_AS(parser.get_all<int>("single"), cmdline::cmdline_error);
+    REQUIRE_THROWS_AS(parser.get_all<bool>("verbose"), cmdline::cmdline_error);
+#elif __cplusplus >= 201703L
+    REQUIRE_FALSE(parser.get_all<int>("missing").has_value());
+    REQUIRE_FALSE(parser.get_all<std::string>("number").has_value());
+    REQUIRE_FALSE(parser.get_all<int>("single").has_value());
+    REQUIRE_FALSE(parser.get_all<bool>("verbose").has_value());
+#else
+    REQUIRE_FALSE(parser.get_all<int>("missing").second);
+    REQUIRE_FALSE(parser.get_all<std::string>("number").second);
+    REQUIRE_FALSE(parser.get_all<int>("single").second);
+    REQUIRE_FALSE(parser.get_all<bool>("verbose").second);
+#endif
+}
+
+TEST_CASE("Subcommand callbacks can read repeatable options", "[command][unique]")
+{
+    bool called = false;
+    cmdline::command child("image", "image management", [&](cmdline::command *cmd) -> int {
+        called = true;
+        REQUIRE(RequireValue(cmd->get_all<std::string>("name")) == std::vector<std::string>{"one", "one", "two"});
+        REQUIRE(RequireValue(cmd->get<std::string>("name")) == "two");
+        return 7;
+    });
+    child.option<std::string>("name", 'n', "image name", true, false);
+    cmdline::command root("tool", "test tool", [](cmdline::command *) -> int {
+        return 1;
+    });
+    root.add(std::move(child));
+    const auto args = Args({"tool", "image", "--name=one", "--name", "one", "-n", "two"});
+    std::vector<const char *> argv;
+    for (const auto &arg : args) {
+        argv.push_back(arg.c_str());
+    }
+    REQUIRE(root(static_cast<int>(argv.size()), argv.data()) == 7);
+    REQUIRE(called);
 }

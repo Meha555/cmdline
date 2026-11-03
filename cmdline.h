@@ -678,10 +678,10 @@ public:
     // add option with value
     template<typename T>
     parser &option_with_default(const std::string &long_name, char short_name = 0,
-                                const std::string &description = "", bool required = true,
+                                const std::string &description = "", bool required = true, bool unique = true,
                                 const T default_value = T())
     {
-        return option_with_default(long_name, short_name, description, required, default_value,
+        return option_with_default(long_name, short_name, description, required, unique, default_value,
                                    detail::default_reader<T>());
     }
 
@@ -689,25 +689,25 @@ public:
     // add option with value
     template<typename T>
     parser &option(const std::string &long_name, char short_name = 0,
-                   const std::string &description = "", bool required = true)
+                   const std::string &description = "", bool required = true, bool unique = true)
     {
-        return option<T>(long_name, short_name, description, required,
+        return option<T>(long_name, short_name, description, required, unique,
                          detail::default_reader<T>());
     }
 
     // add option with value
     template<typename T>
     parser &option(const std::string &long_name, char short_name = 0,
-                   const class description &desc = description(), bool required = true)
+                   const class description &desc = description(), bool required = true, bool unique = true)
     {
-        return option<T>(long_name, short_name, desc, required,
+        return option<T>(long_name, short_name, desc, required, unique,
                          detail::default_reader<T>());
     }
 #else
     // add option with value
     template<typename T>
     parser &option(const std::string &long_name, char short_name = 0,
-                   const std::string &description = "", bool required = true)
+                   const std::string &description = "", bool required = true, bool unique = true)
     {
         if (long_name.empty()) {
             throw cmdline_error("option only accepts long name");
@@ -715,7 +715,7 @@ public:
         if (options_.count(long_name)) {
             throw cmdline_error("multiple flag/option definition: " + long_name);
         }
-        auto p = new option_with_value_with_reader<T, detail::default_reader<T>>(long_name, short_name, description, required, detail::default_reader<T>{});
+        auto p = new option_with_value_with_reader<T, detail::default_reader<T>>(long_name, short_name, description, required, unique, detail::default_reader<T>{});
         options_.emplace(long_name, std::unique_ptr<option_base>(p));
         ordered_.push_back(p);
         return *this;
@@ -724,7 +724,7 @@ public:
     // add option with value
     template<typename T>
     parser &option(const std::string &long_name, char short_name = 0,
-                   const class description &desc = description(), bool required = true)
+                   const class description &desc = description(), bool required = true, bool unique = true)
     {
         if (long_name.empty()) {
             throw cmdline_error("option only accepts long name");
@@ -732,7 +732,7 @@ public:
         if (options_.count(long_name)) {
             throw cmdline_error("multiple flag/option definition: " + long_name);
         }
-        auto p = new option_with_value_with_reader<T, detail::default_reader<T>>(long_name, short_name, desc, required, detail::default_reader<T>{});
+        auto p = new option_with_value_with_reader<T, detail::default_reader<T>>(long_name, short_name, desc, required, unique, detail::default_reader<T>{});
         options_.emplace(long_name, std::unique_ptr<option_base>(p));
         ordered_.push_back(p);
         return *this;
@@ -744,13 +744,13 @@ public:
     template<typename T, typename R>
     typename std::enable_if<std::is_same<decltype(std::declval<R>().operator()(std::declval<const std::string &>())), T>::value, parser &>::type
     option_with_default(const std::string &long_name, char short_name = 0,
-                        const std::string &description = "", bool required = true,
+                        const std::string &description = "", bool required = true, bool unique = true,
                         const T default_value = T(), R value_reader = R())
     {
         if (options_.count(long_name))
             throw cmdline_error("multiple option definition: " + long_name);
         auto p = new option_with_value_with_reader<T, R>(
-            long_name, short_name, description, required, default_value,
+            long_name, short_name, description, required, unique, default_value,
             value_reader);
         options_.emplace(long_name, p);
         ordered_.push_back(p);
@@ -761,13 +761,13 @@ public:
     template<typename T, typename R>
     typename std::enable_if<std::is_same<decltype(std::declval<R>().operator()(std::declval<const std::string &>())), T>::value, parser &>::type
     option(const std::string &long_name, char short_name = 0,
-           const std::string &description = "", bool required = true,
+           const std::string &description = "", bool required = true, bool unique = true,
            R value_reader = R())
     {
         if (options_.count(long_name))
             throw cmdline_error("multiple option definition: " + long_name);
         auto p = new option_with_value_with_reader<T, R>(
-            long_name, short_name, description, required,
+            long_name, short_name, description, required, unique,
             value_reader);
         options_.emplace(long_name, p);
         ordered_.push_back(p);
@@ -778,13 +778,13 @@ public:
     template<typename T, typename R>
     typename std::enable_if<std::is_same<decltype(std::declval<R>().operator()(std::declval<const std::string &>())), T>::value, parser &>::type
     option(const std::string &long_name, char short_name = 0,
-           const class description &desc = description(), bool required = true,
+           const class description &desc = description(), bool required = true, bool unique = true,
            R value_reader = R())
     {
         if (options_.count(long_name))
             throw cmdline_error("multiple option definition: " + long_name);
         auto p = new option_with_value_with_reader<T, R>(
-            long_name, short_name, desc, required,
+            long_name, short_name, desc, required, unique,
             value_reader);
         options_.emplace(long_name, p);
         ordered_.push_back(p);
@@ -794,10 +794,10 @@ public:
     // add option with value
     template<typename T>
     parser &option_with_default(const std::string &long_name, char short_name = 0,
-                                const class description &desc = description(), bool required = true,
+                                const class description &desc = description(), bool required = true, bool unique = true,
                                 const T default_value = T())
     {
-        return option_with_default(long_name, short_name, desc, required, default_value,
+        return option_with_default(long_name, short_name, desc, required, unique, default_value,
                                    detail::default_reader<T>());
     }
 
@@ -805,13 +805,13 @@ public:
     template<typename T, typename R>
     typename std::enable_if<std::is_same<decltype(std::declval<R>().operator()(std::declval<const std::string &>())), T>::value, parser &>::type
     option_with_default(const std::string &long_name, char short_name = 0,
-                        const class description &desc = description(), bool required = true,
+                        const class description &desc = description(), bool required = true, bool unique = true,
                         const T default_value = T(), R value_reader = R())
     {
         if (options_.count(long_name))
             throw cmdline_error("multiple option definition: " + long_name);
         auto p = new option_with_value_with_reader<T, R>(
-            long_name, short_name, desc, required, default_value,
+            long_name, short_name, desc, required, unique, default_value,
             value_reader);
         options_.emplace(long_name, p);
         ordered_.push_back(p);
@@ -822,14 +822,14 @@ public:
     template<typename T, typename R>
     typename std::enable_if<std::is_same<decltype(std::declval<R>().operator()(std::declval<const std::string &>())), T>::value, parser &>::type
     option_with_default(const std::string &long_name, char short_name = 0,
-                        const std::string &description = "", bool required = true,
+                        const std::string &description = "", bool required = true, bool unique = true,
                         const T default_value = T(), R value_reader = R())
     {
         if (options_.count(long_name)) {
             throw cmdline_error("multiple option definition: " + long_name);
         }
         auto p = new option_with_value_with_reader<T, R>(
-            long_name, short_name, description, required, default_value,
+            long_name, short_name, description, required, unique, default_value,
             value_reader);
         options_.emplace(long_name, p);
         ordered_.push_back(p);
@@ -840,14 +840,14 @@ public:
     template<typename T, typename R>
     typename std::enable_if<std::is_same<decltype(std::declval<R>().operator()(std::declval<const std::string &>())), T>::value, parser &>::type
     option(const std::string &long_name, char short_name = 0,
-           const std::string &description = "", bool required = true,
+           const std::string &description = "", bool required = true, bool unique = true,
            R value_reader = R())
     {
         if (options_.count(long_name)) {
             throw cmdline_error("multiple option definition: " + long_name);
         }
         auto p = new option_with_value_with_reader<T, R>(
-            long_name, short_name, description, required,
+            long_name, short_name, description, required, unique,
             value_reader);
         options_.emplace(long_name, p);
         ordered_.push_back(p);
@@ -858,14 +858,14 @@ public:
     template<typename T, typename R>
     typename std::enable_if<std::is_same<decltype(std::declval<R>().operator()(std::declval<const std::string &>())), T>::value, parser &>::type
     option(const std::string &long_name, char short_name = 0,
-           const class description &desc = description(), bool required = true,
+           const class description &desc = description(), bool required = true, bool unique = true,
            R value_reader = R())
     {
         if (options_.count(long_name)) {
             throw cmdline_error("multiple option definition: " + long_name);
         }
         auto p = new option_with_value_with_reader<T, R>(
-            long_name, short_name, desc, required,
+            long_name, short_name, desc, required, unique,
             value_reader);
         options_.emplace(long_name, p);
         ordered_.push_back(p);
@@ -875,10 +875,10 @@ public:
     // add option with value
     template<typename T>
     parser &option_with_default(const std::string &long_name, char short_name = 0,
-                                const class description &desc = description(), bool required = true,
+                                const class description &desc = description(), bool required = true, bool unique = true,
                                 const T default_value = T())
     {
-        return option_with_default(long_name, short_name, desc, required, default_value,
+        return option_with_default(long_name, short_name, desc, required, unique, default_value,
                                    detail::default_reader<T>());
     }
 
@@ -886,14 +886,14 @@ public:
     template<typename T, typename R>
     typename std::enable_if<std::is_same<decltype(std::declval<R>().operator()(std::declval<const std::string &>())), T>::value, parser &>::type
     option_with_default(const std::string &long_name, char short_name = 0,
-                        const class description &desc = description(), bool required = true,
+                        const class description &desc = description(), bool required = true, bool unique = true,
                         const T default_value = T(), R value_reader = R())
     {
         if (options_.count(long_name)) {
             throw cmdline_error("multiple option definition: " + long_name);
         }
         auto p = new option_with_value_with_reader<T, R>(
-            long_name, short_name, desc, required, default_value,
+            long_name, short_name, desc, required, unique, default_value,
             value_reader);
         options_.emplace(long_name, p);
         ordered_.push_back(p);
@@ -1028,6 +1028,50 @@ public:
         return std::make_pair(p->get(), true);
     }
 #endif
+#endif
+
+    /**
+     * @brief 获取 unique=false 选项的全部值，保持出现顺序。
+     * @tparam T 每次出现时读取的单个值类型。
+     * @param name 不含前导连字符的长选项名称。
+     * @return 未出现时返回空列表，有默认值时返回仅含默认值的列表。
+     */
+#ifdef CMDLINE_USE_EXCEPTIONS
+    template<typename T>
+    const std::vector<T> &get_all(const std::string &name) const
+    {
+        auto it = options_.find(name);
+        if (it == options_.end())
+            throw cmdline_error("there is no option: --" + name);
+        const auto *p = dynamic_cast<const option_with_value<T> *>(it->second.get());
+        if (p == nullptr || p->unique())
+            throw cmdline_error("type mismatch option: --" + name);
+        return p->get_all();
+    }
+#elif __cplusplus >= 201703L
+    template<typename T>
+    std::optional<std::vector<T>> get_all(const std::string &name) const
+    {
+        auto it = options_.find(name);
+        if (it == options_.end())
+            return std::nullopt;
+        const auto *p = dynamic_cast<const option_with_value<T> *>(it->second.get());
+        if (p == nullptr || p->unique())
+            return std::nullopt;
+        return p->get_all();
+    }
+#else
+    template<typename T>
+    std::pair<std::vector<T>, bool> get_all(const std::string &name) const
+    {
+        auto it = options_.find(name);
+        if (it == options_.end())
+            return std::make_pair(std::vector<T>(), false);
+        const auto *p = dynamic_cast<const option_with_value<T> *>(it->second.get());
+        if (p == nullptr || p->unique())
+            return std::make_pair(std::vector<T>(), false);
+        return std::make_pair(p->get_all(), true);
+    }
 #endif
 
     /**
@@ -1442,22 +1486,30 @@ private:
 
         // is option with value
         virtual bool has_value() const = 0;
+
         // set option without value
         virtual bool set() = 0;
+
         // set option with value
         virtual bool set(const std::string &value) = 0;
+
         // if option value has been set
         bool has_set() const
         {
             return has_value_;
         }
+
         // if value is valid
         virtual std::pair<std::string, bool> valid() const
         {
             return {"", true};
         }
+
         // if option is required
         virtual bool required() const = 0;
+
+        // if option is unique
+        virtual bool unique() const = 0;
 
         const std::string &name() const
         {
@@ -1536,6 +1588,11 @@ private:
             return false;
         }
 
+        bool unique() const override
+        {
+            return true;
+        }
+
         std::string short_description() const override
         {
             return "--" + nam_;
@@ -1554,24 +1611,29 @@ private:
     public:
         option_with_value(const std::string &long_name, char short_name,
                           const class description &description,
-                          bool required, const T &default_value)
+                          bool required, bool unique, const T &default_value)
             : option_base(long_name, short_name, description)
             , required_(required)
+            , unique_(unique)
             , actual_(default_value)
             , with_default_(true)
             , occurred_(false)
         {
-            this->desc_.wrap(full_description(required, default_value));
+            if (!unique_)
+                actuals_.push_back(default_value);
+            this->desc_.wrap(full_description(required, unique, default_value));
         }
 
-        option_with_value(const std::string &long_name, char short_name, const class description &description,
-                          bool required)
+        option_with_value(const std::string &long_name, char short_name,
+                          const class description &description,
+                          bool required, bool unique)
             : option_base(long_name, short_name, description)
             , required_(required)
+            , unique_(unique)
             , with_default_(false)
             , occurred_(false)
         {
-            this->desc_.wrap(full_description(required));
+            this->desc_.wrap(full_description(required, unique));
         }
 
         ~option_with_value() = default;
@@ -1581,6 +1643,11 @@ private:
             if (occurred_ && !with_default_ && !has_value_)
                 throw cmdline_error("option without value: --" + nam_);
             return actual_;
+        }
+
+        const std::vector<T> &get_all() const
+        {
+            return actuals_;
         }
 
         bool has_value() const override
@@ -1596,8 +1663,18 @@ private:
 
         bool set(const std::string &value) override
         {
+            if (unique_ && occurred_) {
+                this->set_error("option is not unique");
+                return false;
+            }
             try {
                 actual_ = read(value);
+                if (!unique_) {
+                    // 默认值仅在没有显式输入时使用，读取成功后再替换。
+                    if (!occurred_)
+                        actuals_.clear();
+                    actuals_.push_back(actual_);
+                }
                 has_value_ = true;
                 occurred_ = true;
                 this->clear_error();
@@ -1612,18 +1689,24 @@ private:
         std::pair<std::string, bool> valid() const override
         {
             // if required and not set, invalid
-            if (required_ && !has_value_) {
+            if (required_ && (!occurred_ || !has_value_)) {
                 return {"need option", false};
             }
             // if occurred and no value can be used, invalid
-            if (occurred_ && !with_default_ && !has_value_)
+            if (occurred_ && !with_default_ && !has_value_) {
                 return {"option needs value", false};
+            }
             return {"", true};
         }
 
         bool required() const override
         {
             return required_;
+        }
+
+        bool unique() const override
+        {
+            return unique_;
         }
 
         std::string short_description() const override
@@ -1642,27 +1725,33 @@ private:
         }
 
     protected:
-        class description full_description(bool required, const T &default_value = T()) const
+        class description full_description(bool required, bool unique, const T &default_value = T()) const
         {
             const std::string typename_str = (g_config.show_option_typename ? detail::readable_typename<T>() : "");
             const std::string required_str = (required ? "required" : "");
+            const std::string unique_str = (unique ? "unique" : "");
             const std::string default_value_str = (with_default_ ? "[=" + detail::default_value<T>(default_value) + "]" : "");
 
             std::string msg;
             msg += typename_str.empty() ? "" : typename_str;
             msg += required_str.empty() ? "" : msg.empty() ? required_str : " " + required_str;
-            msg += default_value_str.empty() ? "" : msg.empty() ? default_value_str : " " + default_value_str;
+            msg += unique_str.empty() ? "" : msg.empty() ? unique_str : " " + unique_str;
             if (!msg.empty()) {
                 msg = " (" + msg + ')';
             }
+            msg += default_value_str.empty() ? "" : msg.empty() ? default_value_str : " " + default_value_str;
             return cmdline::description(msg);
         }
 
         virtual T read(const std::string &s) = 0;
         // whether this option is required
         const bool required_;
+        // whether this option is unique
+        const bool unique_;
         // the actual value passed from command line
         T actual_;
+        // 按出现顺序保存 unique=false 选项的全部值。
+        std::vector<T> actuals_;
         // whether this option has default value
         const bool with_default_;
         // whether this option has occurred
@@ -1674,15 +1763,15 @@ private:
     {
     public:
         option_with_value_with_reader(const std::string &long_name, char short_name, const class description &desc,
-                                      bool required, const T default_value, R value_reader)
-            : option_with_value<T>(long_name, short_name, desc, required, default_value)
+                                      bool required, bool unique, const T default_value, R value_reader)
+            : option_with_value<T>(long_name, short_name, desc, required, unique, default_value)
             , reader_(value_reader)
         {
             this->desc_.wrap(full_description());
         }
         option_with_value_with_reader(const std::string &long_name, char short_name, const class description &desc,
-                                      bool required, R value_reader)
-            : option_with_value<T>(long_name, short_name, desc, required)
+                                      bool required, bool unique, R value_reader)
+            : option_with_value<T>(long_name, short_name, desc, required, unique)
             , reader_(value_reader)
         {
             this->desc_.wrap(full_description());

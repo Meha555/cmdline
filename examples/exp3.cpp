@@ -57,7 +57,7 @@ int main(int argc, const char *argv[])
     });
     containerCmd
         .flag("ls", 'l', "list all containers")
-        .option_with_default<string>("introspect", 'i', "introspect a container", false, "")
+        .option_with_default<string>("introspect", 'i', "introspect a container", false, true, "")
         .introduction("container management");
 
     // root command
@@ -106,8 +106,8 @@ int main(int argc, const char *argv[])
         }
     });
     rootCmd
-        .option_with_default<string>("pull", 0, "pull an image", false, "docker.io/busybox")
-        .option<string>("run", 0, "run a container", false)
+        .option_with_default<string>("pull", 0, "pull an image", false, true, "docker.io/busybox")
+        .option<string>("run", 0, "run a container", false, true)
         .flag("version", 'v', "version number")
         .introduction("a simple docker client");
 

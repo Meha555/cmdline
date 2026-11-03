@@ -5,8 +5,9 @@ using namespace std;
 int main(int argc, const char *argv[])
 {
     cmdline::parser a;
-    a.option_with_default<string>("host", 'h', "host name", false);
-    a.option<int>("port", 'p', "port number", true);
+    a.option_with_default<string>("host", 'h', "host name", false, true, "");
+    a.option<int>("port", 'p', "port number", true, true);
+    a.option<string>("tag", 't', "repeatable tag", false, false);
     a.flag("gzip", 'g', "gzip when transfer");
     a.version("1.0.0");
 
@@ -30,6 +31,9 @@ int main(int argc, const char *argv[])
 
         cout << a.get<string>("host") << ":"
              << a.get<int>("port") << endl;
+        for (const auto &tag : a.get_all<string>("tag")) {
+            cout << "tag: " << tag << endl;
+        }
     } catch (const cmdline::cmdline_error &ex) {
         cerr << ex.what();
         return 1;
@@ -66,6 +70,12 @@ int main(int argc, const char *argv[])
     if (port) {
         cout << "port: " << *port << endl;
     }
+    auto tags = a.get_all<string>("tag");
+    if (tags) {
+        for (const auto &tag : *tags) {
+            cout << "tag: " << tag << endl;
+        }
+    }
 #else
     if (host.second) {
         cout << "host: " << host.first << endl;
@@ -73,6 +83,12 @@ int main(int argc, const char *argv[])
     auto port = a.get<int>("port");
     if (port.second) {
         cout << "port: " << port.first << endl;
+    }
+    auto tags = a.get_all<string>("tag");
+    if (tags.second) {
+        for (const auto &tag : tags.first) {
+            cout << "tag: " << tag << endl;
+        }
     }
 #endif
 #endif
