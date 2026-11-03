@@ -605,6 +605,8 @@ static inline std::string apply_style(const std::string &text, style_code code)
 
 class parser
 {
+    class option_base;
+
 public:
     parser() = default;
     parser(const parser &other) = delete;
@@ -976,7 +978,7 @@ public:
             dynamic_cast<const option_with_value<T> *>(options_.find(name)->second.get());
         if (p == nullptr)
             throw cmdline_error("type mismatch option: --" + name);
-        if (!p->occurred() && !p->with_default())
+        if (!p->has_set() && !p->with_default())
             throw cmdline_error("option --" + name + " is not set");
         return p->get();
     }
@@ -997,7 +999,7 @@ public:
             dynamic_cast<const option_with_value<T> *>(options_.find(name)->second.get());
         if (p == nullptr)
             return std::nullopt;
-        if (!p->occurred() && !p->with_default())
+        if (!p->has_set() && !p->with_default())
             return std::nullopt;
         return p->get();
     }
@@ -1021,7 +1023,7 @@ public:
             std::cerr << "type mismatch option '" << name << "'\n";
             return std::make_pair(T(), false);
         }
-        if (!p->occurred() && !p->with_default()) {
+        if (!p->has_set() && !p->with_default()) {
             std::cerr << "option '" << name << "' is not set\n";
             return std::make_pair(T(), false);
         }
@@ -1168,18 +1170,17 @@ public:
         if (prog_name_ == "")
             prog_name_ = argv[0];
         // filter argv
-        std::map<char, std::string> lookup; // <short_name, long_name>
+        std::map<char, option_base *> lookup; // <short_name, option_base *>
         for (const auto &p : options_) {
             if (p.first.empty())
                 continue;
             char initial = p.second->short_name();
             if (initial) {
                 if (lookup.count(initial) > 0) {
-                    lookup[initial].clear();
                     errors_.push_back(std::string("short option -") + initial + " is ambiguous");
                     return false;
                 } else {
-                    lookup[initial] = p.first;
+                    lookup[initial] = p.second.get();
                 }
             }
         }
@@ -1190,27 +1191,20 @@ public:
                 const char *eq = std::strchr(argv[i] + 2, '=');
                 if (eq) {
                     std::string name(argv[i] + 2, eq);
-                    std::string value(eq + 1);
-                    check_option(name, value);
+                    if (auto *option = find_option(name))
+                        check_option(*option, eq + 1);
                 } else {
                     std::string name(argv[i] + 2);
-                    auto it = options_.find(name);
-                    if (it == options_.end()) {
-                        errors_.push_back("undefined option: --" + name);
+                    auto *option = find_option(name);
+                    if (!option)
                         continue;
-                    }
                     // an option with value
-                    if (it->second->has_value()) {
-                        if (i + 1 < argc) {
-                            check_option(name, argv[++i]);
-                        } else {
-                            errors_.push_back("option needs value: --" + name);
-                            continue;
-                        }
+                    if (option->has_value() && i + 1 < argc) {
+                        check_option(*option, argv[++i]);
                     }
-                    // just a flag
+                    // 没有提供后续参数时，由 set() 检查是否缺少值。
                     else {
-                        check_option(name);
+                        check_option(*option);
                     }
                 }
             }
@@ -1222,22 +1216,20 @@ public:
                 // deal with combined short options
                 for (int j = 2; argv[i][j]; j++) {
                     last_option = argv[i][j];
-                    if (!check_short_option(lookup, argv[i][j - 1]))
-                        continue;
-                    check_option(lookup[argv[i][j - 1]]);
+                    if (auto *option = find_option(lookup, argv[i][j - 1]))
+                        check_option(*option);
                 }
 
-                if (!check_short_option(lookup, last_option))
+                auto *option = find_option(lookup, last_option);
+                if (!option)
                     continue;
-                const std::string &long_name = lookup[last_option];
                 // an option with value
-                if (i + 1 < argc && options_[long_name]->has_value()) {
-                    check_option(long_name, argv[i + 1]);
-                    i++;
+                if (i + 1 < argc && option->has_value()) {
+                    check_option(*option, argv[++i]);
                 }
-                // just a flag
+                // 没有提供后续参数时，由 set() 检查是否缺少值。
                 else {
-                    check_option(long_name);
+                    check_option(*option);
                 }
             } else {
                 others_.push_back(argv[i]);
@@ -1246,10 +1238,9 @@ public:
 
         // check options requirements
         for (const auto &p : options_) {
-            auto ret = p.second->valid();
-            if (!ret.second) {
-                errors_.push_back(ret.first + ": --" + std::string(p.first));
-            }
+            // if required and not set, invalid
+            if (p.second->required() && !p.second->has_set())
+                errors_.push_back("need option: --" + p.first);
         }
 
         return errors_.empty();
@@ -1422,51 +1413,41 @@ private:
         return it != options_.end() && it->second->has_set();
     }
 
-    bool check_short_option(std::map<char, std::string> &lookup, char option)
+    option_base *find_option(const std::string &name)
+    {
+        auto it = options_.find(name);
+        if (it == options_.end()) {
+            errors_.push_back("undefined option: --" + name);
+            return nullptr;
+        }
+        return it->second.get();
+    }
+
+    option_base *find_option(const std::map<char, option_base *> &lookup, char option)
     {
         auto it = lookup.find(option);
         if (it == lookup.end()) {
             errors_.push_back(std::string("undefined short option: -") + option);
-            return false;
+            return nullptr;
         }
-        if (it->second == "") {
-            errors_.push_back(std::string("ambiguous short option: -") + option);
-            return false;
-        }
-        return true;
+        return it->second;
     }
 
-    void check_option(const std::string &name)
+    // 每次输入的失败统一添加上下文信息，解析继续收集后续错误。
+    void check_option(option_base &option, const char *value = nullptr)
     {
-        auto it = options_.find(name);
-        if (it == options_.end()) {
-            errors_.push_back("undefined option: --" + name);
-            return;
-        }
-        if (!it->second->set()) {
-            std::string msg = "option needs value: --" + name;
-            if (!it->second->last_error().empty()) {
-                msg += " (" + it->second->last_error() + ")";
-            }
+        try {
+            if (value)
+                option.set(value);
+            else
+                option.set();
+        } catch (const std::exception &ex) {
+            std::string msg = value ? "option value is invalid: --" : "option needs value: --";
+            msg += option.name();
+            if (value)
+                msg += "=" + std::string(value);
+            msg += " (" + std::string(ex.what()) + ")";
             errors_.push_back(msg);
-            return;
-        }
-    }
-
-    void check_option(const std::string &name, const std::string &value)
-    {
-        auto it = options_.find(name);
-        if (it == options_.end()) {
-            errors_.push_back("undefined option: --" + name);
-            return;
-        }
-        if (!it->second->set(value)) {
-            std::string msg = "option value is invalid: --" + name + "=" + value;
-            if (!it->second->last_error().empty()) {
-                msg += " (" + it->second->last_error() + ")";
-            }
-            errors_.push_back(msg);
-            return;
         }
     }
 
@@ -1488,21 +1469,15 @@ private:
         virtual bool has_value() const = 0;
 
         // set option without value
-        virtual bool set() = 0;
+        virtual void set() = 0;
 
         // set option with value
-        virtual bool set(const std::string &value) = 0;
+        virtual void set(const std::string &value) = 0;
 
         // if option value has been set
         bool has_set() const
         {
             return has_value_;
-        }
-
-        // if value is valid
-        virtual std::pair<std::string, bool> valid() const
-        {
-            return {"", true};
         }
 
         // if option is required
@@ -1528,28 +1503,12 @@ private:
 
         virtual std::string short_description() const = 0;
 
-        const std::string &last_error() const
-        {
-            return error_;
-        }
-
     protected:
-        void clear_error()
-        {
-            error_.clear();
-        }
-
-        void set_error(const std::string &error)
-        {
-            error_ = error;
-        }
-
         const std::string nam_;
         const char snam_;
         class description desc_;
         // whether value has been set
         bool has_value_;
-        std::string error_;
     };
 
     // flags are options without value
@@ -1570,17 +1529,14 @@ private:
             return false;
         }
 
-        bool set() override
+        void set() override
         {
-            clear_error();
             has_value_ = true;
-            return true;
         }
 
-        bool set(const std::string &) override
+        void set(const std::string &) override
         {
-            set_error("flag does not accept a value");
-            return false;
+            throw cmdline_error("flag does not accept a value");
         }
 
         bool required() const override
@@ -1617,7 +1573,6 @@ private:
             , unique_(unique)
             , actual_(default_value)
             , with_default_(true)
-            , occurred_(false)
         {
             if (!unique_)
                 actuals_.push_back(default_value);
@@ -1631,7 +1586,6 @@ private:
             , required_(required)
             , unique_(unique)
             , with_default_(false)
-            , occurred_(false)
         {
             this->desc_.wrap(full_description(required, unique));
         }
@@ -1640,8 +1594,6 @@ private:
 
         const T &get() const
         {
-            if (occurred_ && !with_default_ && !has_value_)
-                throw cmdline_error("option without value: --" + nam_);
             return actual_;
         }
 
@@ -1655,48 +1607,23 @@ private:
             return true;
         }
 
-        bool set() override
+        void set() override
         {
-            this->set_error("option requires a value");
-            return false;
+            throw cmdline_error("option requires a value");
         }
 
-        bool set(const std::string &value) override
+        void set(const std::string &value) override
         {
-            if (unique_ && occurred_) {
-                this->set_error("option is not unique");
-                return false;
+            if (unique_ && has_value_)
+                throw cmdline_error("option is not unique");
+            actual_ = read(value);
+            if (!unique_) {
+                // 默认值仅在没有显式输入时使用，读取成功后再替换。
+                if (!has_value_)
+                    actuals_.clear();
+                actuals_.push_back(actual_);
             }
-            try {
-                actual_ = read(value);
-                if (!unique_) {
-                    // 默认值仅在没有显式输入时使用，读取成功后再替换。
-                    if (!occurred_)
-                        actuals_.clear();
-                    actuals_.push_back(actual_);
-                }
-                has_value_ = true;
-                occurred_ = true;
-                this->clear_error();
-            } catch (const std::exception &ex) {
-                this->set_error(ex.what());
-                std::cerr << ex.what() << '\n';
-                return false;
-            }
-            return true;
-        }
-
-        std::pair<std::string, bool> valid() const override
-        {
-            // if required and not set, invalid
-            if (required_ && (!occurred_ || !has_value_)) {
-                return {"need option", false};
-            }
-            // if occurred and no value can be used, invalid
-            if (occurred_ && !with_default_ && !has_value_) {
-                return {"option needs value", false};
-            }
-            return {"", true};
+            has_value_ = true;
         }
 
         bool required() const override
@@ -1712,11 +1639,6 @@ private:
         std::string short_description() const override
         {
             return "--" + nam_ + "=" + detail::readable_typename<T>();
-        }
-
-        bool occurred() const
-        {
-            return occurred_;
         }
 
         bool with_default() const
@@ -1754,8 +1676,6 @@ private:
         std::vector<T> actuals_;
         // whether this option has default value
         const bool with_default_;
-        // whether this option has occurred
-        bool occurred_;
     };
 
     template<typename T, typename R>

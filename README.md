@@ -123,6 +123,8 @@ if (tags.parse_check(argc, argv)) {
 | `parser::error_full()` | Return all parse error messages separated by newlines. |
 | `parser::help()` | Generate usage and option help text. The caller decides where to print it. |
 
+选项校验失败时，`parse()` 将选项名称、输入值和失败原因保存到错误列表，并继续处理后续参数。选项校验过程不直接打印错误。调用方后续要通过 `error()`、`error_full()` 或 `parse_check()` 抛出的异常决定如何输出。
+
 ### Constraints And Readers
 
 | Interface | Description |

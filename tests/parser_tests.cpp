@@ -496,3 +496,83 @@ TEST_CASE("Subcommand callbacks can read repeatable options", "[command][unique]
     REQUIRE(root(static_cast<int>(argv.size()), argv.data()) == 7);
     REQUIRE(called);
 }
+
+TEST_CASE("Option validation preserves state and continues after errors", "[parser][validation]")
+{
+    cmdline::parser parser;
+    parser.option_with_default<int>("number", 'n', "number", false, true, 3, cmdline::range(1, 5))
+        .flag("verbose", 'v', "verbose");
+
+    SECTION("Unknown long and short options do not consume subsequent input")
+    {
+        REQUIRE_FALSE(parser.parse(Args({"tool", "--missing", "--other=value", "-xv", "-n", "4"})));
+        REQUIRE(parser.exist("verbose"));
+        REQUIRE(RequireValue(parser.get<int>("number")) == 4);
+        const auto errors = parser.error_full();
+        REQUIRE_THAT(errors, Catch::Matchers::ContainsSubstring("--missing"));
+        REQUIRE_THAT(errors, Catch::Matchers::ContainsSubstring("--other"));
+        REQUIRE_THAT(errors, Catch::Matchers::ContainsSubstring("-x"));
+    }
+    SECTION("Missing values preserve the default for both aliases")
+    {
+        for (const auto *name : {"--number", "-n"}) {
+            REQUIRE_FALSE(parser.parse(Args({"tool", name})));
+            REQUIRE_FALSE(parser.exist("number"));
+            REQUIRE(RequireValue(parser.get<int>("number")) == 3);
+        }
+    }
+    SECTION("A flag rejects an explicit value and later options still succeed")
+    {
+        REQUIRE_FALSE(parser.parse(Args({"tool", "--verbose=yes", "-n", "4"})));
+        REQUIRE_FALSE(parser.exist("verbose"));
+        REQUIRE(RequireValue(parser.get<int>("number")) == 4);
+        REQUIRE_THAT(parser.error_full(), Catch::Matchers::ContainsSubstring("--verbose=yes"));
+    }
+    SECTION("A rejected first value leaves a unique required option available")
+    {
+        parser.option<int>("required", 'r', "required", true, true, cmdline::range(1, 5));
+        REQUIRE_FALSE(parser.parse(Args({"tool", "-r", "9", "--required=2", "--number=8", "-v"})));
+        REQUIRE(parser.exist("required"));
+        REQUIRE(RequireValue(parser.get<int>("required")) == 2);
+        REQUIRE(RequireValue(parser.get<int>("number")) == 3);
+        REQUIRE(parser.exist("verbose"));
+        const auto errors = parser.error_full();
+        REQUIRE_THAT(errors, Catch::Matchers::ContainsSubstring("--required=9"));
+        REQUIRE_THAT(errors, Catch::Matchers::ContainsSubstring("--number=8"));
+    }
+    SECTION("An explicit empty string is a supplied value")
+    {
+        parser.option<std::string>("text", 't', "text", true, true);
+        REQUIRE(parser.parse(Args({"tool", "--text="})));
+        REQUIRE(parser.exist("text"));
+        REQUIRE(RequireValue(parser.get<std::string>("text")).empty());
+    }
+}
+
+TEST_CASE("Short option validation handles groups and ambiguous aliases", "[parser][validation]")
+{
+    cmdline::parser parser;
+    parser.option<int>("number", 'n', "number", false, true).flag("verbose", 'v', "verbose");
+
+    SECTION("The last option in a group consumes its value")
+    {
+        REQUIRE(parser.parse(Args({"tool", "-vn", "4"})));
+        REQUIRE(parser.exist("verbose"));
+        REQUIRE(RequireValue(parser.get<int>("number")) == 4);
+    }
+    SECTION("A value option inside a group reports its missing value")
+    {
+        REQUIRE_FALSE(parser.parse(Args({"tool", "-nv", "4"})));
+        REQUIRE_FALSE(parser.exist("number"));
+        REQUIRE(parser.exist("verbose"));
+        REQUIRE(parser.rest() == std::vector<std::string>{"4"});
+    }
+    SECTION("Conflicting aliases reject input before changing option state")
+    {
+        parser.flag("other", 'v', "other");
+        REQUIRE_FALSE(parser.parse(Args({"tool", "-v", "-n", "4"})));
+        REQUIRE_FALSE(parser.exist("verbose"));
+        REQUIRE_FALSE(parser.exist("other"));
+        REQUIRE_FALSE(parser.exist("number"));
+    }
+}
