@@ -194,7 +194,7 @@ struct range_reader
     {
         T ret = default_reader<T>()(s);
         if (!(ret >= low_ && ret <= high_))
-            throw cmdline::cmdline_error(s + " out of range" + constraint());
+            throw cmdline::cmdline_error("\"" + s + "\" out of range" + constraint());
         return ret;
     }
     const std::string &constraint()
@@ -217,7 +217,7 @@ struct oneof_reader
     {
         T ret = default_reader<T>()(s);
         if (std::find(alts_.begin(), alts_.end(), ret) == alts_.end())
-            throw cmdline_error(s + " not in " + constraint());
+            throw cmdline_error("\"" + s + "\" not in " + constraint());
         return ret;
     }
     void add(T &&v)
@@ -269,7 +269,7 @@ struct regex_reader
     {
         std::match_results<typename T::const_iterator> match;
         if (!std::regex_match(s, match, re_)) { // use regex_match to ensure full match
-            throw cmdline_error(s + " doesn't match " + constraint());
+            throw cmdline_error("\"" + s + "\" doesn't match " + constraint());
         }
         return match[0];
     }
@@ -1650,8 +1650,8 @@ private:
 
             std::string msg;
             msg += typename_str.empty() ? "" : typename_str;
-            msg += required_str.empty() ? "" : required_str;
-            msg += default_value_str.empty() ? "" : default_value_str;
+            msg += required_str.empty() ? "" : msg.empty() ? required_str : " " + required_str;
+            msg += default_value_str.empty() ? "" : msg.empty() ? default_value_str : " " + default_value_str;
             if (!msg.empty()) {
                 msg = " (" + msg + ')';
             }
@@ -1874,7 +1874,7 @@ private:
 
     void print_help_or_version() const
     {
-        if (exist("version") && !version().empty()) {
+        if (register_version_ && exist("version") && !version().empty()) {
             std::cout << version() << std::endl;
         } else {
             std::cout << help();
